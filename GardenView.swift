@@ -17,6 +17,7 @@ struct GardenView: View {
     @State private var currentPoem: Poem? = nil
     @State private var discoveredPoemsID: Set <UUID> = []
     @State private var plantingPulse = false
+    @State private var revisitingPoem = false
     
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -33,7 +34,7 @@ struct GardenView: View {
                 
                 gradient: Gradient(colors: [
                     Color.persianIndigo,
-                    Color.persianTurquoise
+                    Color.persianTurquoise,
                 ]
                 ),
                 
@@ -55,7 +56,7 @@ struct GardenView: View {
                     .frame(width: 320, height: 320)
                     .blur(radius: 70)
                     .scaleEffect(breathe ? 1.03 : 0.97)
-                    .opacity(breathe ? 0.12 + Double(growthLevel) * 0.03 : 0.08)
+                    .opacity (breathe ? (revisitingPoem ? 0.10 : 0.12 + Double(growthLevel) * 0.03) : 0.08)
                     .animation (reduceMotion
                                 ? .none : .easeInOut(duration: 8).repeatForever(autoreverses: true),
                                 value: breathe)
@@ -65,23 +66,29 @@ struct GardenView: View {
                     .frame(width: 80, height: 80)
                     .overlay (
                         Circle()
-                            .stroke (Color.persianGold.opacity (0.6), lineWidth: 1.5))
-                    .scaleEffect(seedPressed ? 0.95 : plantingPulse ? 0.6 : 1.0)
+                    .stroke (Color.persianGold.opacity (0.6), lineWidth: 1.5))
+                    .scaleEffect(seedPressed ? 0.95 : plantingPulse ? 1.08 : 1.0)
                     .opacity(seedActive ? 1.0 : 0.7)
                     .animation(.easeInOut(duration: 0.4), value: seedPressed)
                     .animation(.easeInOut(duration: 0.3), value: seedActive)
                 
                 
                     .onTapGesture {
+                        
+                        
                         guard !showPoem else { return }
                         guard let randomPoem = PoemLibrary.poems.randomElement() else { return }
+                                                
                         
+                        let isNewPoem = !discoveredPoemsID.contains(randomPoem.id)
                         currentPoem = randomPoem
-                        
                         seedActive.toggle()
+                        if isNewPoem {
+                            discoveredPoemsID.insert(randomPoem.id)
+                        }
                         
-                        discoveredPoemsID.insert(randomPoem.id)
-                        
+                        revisitingPoem = !isNewPoem
+
                         plantingPulse = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                             plantingPulse = false
@@ -177,6 +184,8 @@ struct GardenView: View {
                                    withAnimation {
                                        showPoem = false
                                    }
+                                   revisitingPoem = false
+
                                }
                     
                     PoemOverlayView(
@@ -192,10 +201,20 @@ struct GardenView: View {
             }
         }.task {
             if !breathe {breathe = true}
+            if discoveredPoemsID.isEmpty {
+                discoveredPoemsID = GardenProgressStore.load()
+            }
         }
-       
-    }
-}
+        .onAppear {
+            if discoveredPoemsID.isEmpty {
+                discoveredPoemsID = GardenProgressStore.load()
+            }
+            if !breathe { breathe = true }
+            }
+        .onChange(of: discoveredPoemsID) {newValue in GardenProgressStore.save (newValue)}
+        }
+            
+        }
 #Preview {
     GardenView()
 }
