@@ -21,7 +21,7 @@ let package = Package(
             displayVersion: "1.0",
             bundleVersion: "1",
             appIcon: .placeholder(icon: .sun),
-            accentColor: .presetColor(.green),
+            accentColor: .presetColor(.teal),
             supportedDeviceFamilies: [
                 .pad,
                 .phone
@@ -42,6 +42,5 @@ let package = Package(
                 .process("Resources")
             ]
         )
-    ],
-    swiftLanguageVersions: [.v6]
+    ]
 )

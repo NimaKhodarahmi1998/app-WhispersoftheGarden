@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 struct BundlePNGImage: View {
-    let fileName: String   // include extension, e.g. "Plant.png"
+    let fileName: String   
     let size: CGFloat
     
     var body: some View {

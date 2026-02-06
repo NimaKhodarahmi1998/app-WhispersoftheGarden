@@ -15,42 +15,48 @@ struct PoemOverlayView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     
     var body: some View {
-        VStack(spacing: 20) {
-            Text(persian)
-                .font(.system(size: 24, weight: .medium))
-                .multilineTextAlignment(.center)
-                .foregroundColor(Color.persianIndigo)
+        ZStack{
+            if let uiImage = UIImage(named: "Katibeh.PNG") {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFit()
+                            .ignoresSafeArea()
+                    }
             
-            Text(english)
-                .font(.system(size: 16))
-                .italic()
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Color.persianIndigo.opacity(0.7))
+            VStack(spacing: 20) {
+                Text(persian)
+                    .font(.system(size: 24, weight: .medium))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(Color.persianIndigo)
+                
+                Text(english)
+                    .font(.system(size: 16))
+                    .italic()
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.persianIndigo.opacity(0.7))
+                
+                Divider()
+                   // .padding(.vertical, 2)
+                
+                Text(culturalNote)
+                    .font(.system(size: 14))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.persianIndigo.opacity(0.75))
+                
+                Text(reflection)
+                    .font(.system(size: 15, weight: .medium))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.persianIndigo)
+                    .padding(.top, 4)
+            }
+            .padding(28)
             
-            Divider()
-                .padding(.vertical, 8)
-            
-            Text(culturalNote)
-                .font(.system(size: 14))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Color.persianIndigo.opacity(0.75))
-            
-            Text(reflection)
-                .font(.system(size: 15, weight: .medium))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Color.persianIndigo)
-                .padding(.top, 4)
+            .padding(.horizontal, 24)
+            .transition(
+                reduceMotion
+                ? .opacity
+                : .opacity.combined(with: .scale(scale: 0.98))
+            )
         }
-        .padding(28)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .foregroundStyle(Color.persianSand)
-        )
-        .padding(.horizontal, 24)
-        .transition(
-            reduceMotion
-            ? .opacity
-            : .opacity.combined(with: .scale(scale: 0.98))
-        )
     }
 }
