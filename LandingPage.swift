@@ -52,15 +52,37 @@ struct LandingPage: View {
                                     .scaledToFit()
                                     .frame (width: min(geometry.size.width * 0.8 , 400))
                                 
-                                Text("Enter Your Garden")
-                                    .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                    .fontWeight(.black)
-                                    .foregroundColor(.white)
-                                    .shadow(color: Color(red: 0/255, green: 32/255, blue: 72/255, opacity: 1.0),
-                                            radius: 1,
-                                            x: 2,
-                                            y: 2)
-                                    .minimumScaleFactor(0.6)
+                                ZStack {
+                                    Text("Enter Your Garden")
+                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                        .fontWeight(.black)
+                                        .foregroundColor(.black)
+                                        .offset(x: -2, y: -2)
+
+                                    Text("Enter Your Garden")
+                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                        .fontWeight(.black)
+                                        .foregroundColor(.black)
+                                        .offset(x: 2, y: -2)
+
+                                    Text("Enter Your Garden")
+                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                        .fontWeight(.black)
+                                        .foregroundColor(.black)
+                                        .offset(x: -2, y: 2)
+
+                                    Text("Enter Your Garden")
+                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                        .fontWeight(.black)
+                                        .foregroundColor(.black)
+                                        .offset(x: 2, y: 2)
+
+                                    Text("Enter Your Garden")
+                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                        .fontWeight(.black)
+                                        .foregroundColor(.white)
+                                }
+                                .minimumScaleFactor(0.6)
 
                             }
                         }
@@ -74,14 +96,37 @@ struct LandingPage: View {
                                     .scaledToFit()
                                     .frame (width: min(geometry.size.width * 0.8 , 400))
                                 
-                                Text ("Options")
-                                    .font(Font.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                    .fontWeight(.black)
-                                    .foregroundStyle(.white)
-                                    .shadow(color: Color(red: 0/255, green: 32/255, blue: 72/255, opacity: 1.0),
-                                            radius: 1,
-                                            x: 2,
-                                            y: 2)
+                                ZStack {
+                                    Text("Options")
+                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                        .fontWeight(.black)
+                                        .foregroundColor(.black)
+                                        .offset(x: -2, y: -2)
+
+                                    Text("Options")
+                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                        .fontWeight(.black)
+                                        .foregroundColor(.black)
+                                        .offset(x: 2, y: -2)
+
+                                    Text("Options")
+                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                        .fontWeight(.black)
+                                        .foregroundColor(.black)
+                                        .offset(x: -2, y: 2)
+
+                                    Text("Options")
+                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                        .fontWeight(.black)
+                                        .foregroundColor(.black)
+                                        .offset(x: 2, y: 2)
+
+                                    Text("Options")
+                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                        .fontWeight(.black)
+                                        .foregroundColor(.white)
+                                }
+                                .minimumScaleFactor(0.6)
                             }
                         }
                         Spacer()

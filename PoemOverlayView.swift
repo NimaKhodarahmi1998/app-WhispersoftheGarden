@@ -16,7 +16,7 @@ struct PoemOverlayView: View {
     
     var body: some View {
         ZStack{
-            if let uiImage = UIImage(named: "Katibeh.PNG") {
+            if let uiImage = UIImage(named: "Katibe.PNG") {
                         Image(uiImage: uiImage)
                             .resizable()
                             .scaledToFit()
@@ -55,8 +55,8 @@ struct PoemOverlayView: View {
             .transition(
                 reduceMotion
                 ? .opacity
-                : .opacity.combined(with: .scale(scale: 0.98))
+                : .opacity.combined(with: .scale(scale: 0.50))
             )
-        }
+        }.border(.red)
     }
 }
