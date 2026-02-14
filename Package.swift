@@ -42,5 +42,6 @@ let package = Package(
                 .process("Resources")
             ]
         )
-    ]
+    ],
+    swiftLanguageVersions: [.version("6")]
 )
