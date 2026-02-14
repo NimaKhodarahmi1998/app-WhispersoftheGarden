@@ -16,6 +16,49 @@ struct Pad: Identifiable, Equatable {
     var movementStyle: MovementStyle
     var phase: CGFloat  // random offset for wave patterns
     var speed: CGFloat  // individual movement speed
+    var bobOffset: CGFloat = 0  // vertical bob offset for tap response
+    var bobVelocity: CGFloat = 0  // bob animation velocity
+    var glowIntensity: CGFloat = 0  // glow when transforming to lotus
+}
+
+struct DustParticle: Identifiable {
+    let id = UUID()
+    var position: CGPoint  // screen coordinates
+    var size: CGFloat
+    var opacity: Double
+    var speed: CGFloat
+    var drift: CGFloat  // horizontal drift amount
+}
+
+struct Firefly: Identifiable {
+    let id = UUID()
+    var position: CGPoint
+    var size: CGFloat
+    var opacity: Double
+    var baseOpacity: Double
+    var twinklePhase: CGFloat
+    var speed: CGFloat
+    var drift: CGFloat
+}
+
+struct WaterRipple: Identifiable {
+    let id = UUID()
+    var center: CGPoint  // where tap occurred
+    var radius: CGFloat  // current radius
+    var opacity: Double  // fades out as it expands
+    var createdAt: Date
+}
+
+struct RosePetal: Identifiable {
+    let id = UUID()
+    var position: CGPoint
+    var rotation: CGFloat
+    var rotationSpeed: CGFloat
+    var size: CGFloat
+    var opacity: Double
+    var speed: CGFloat
+    var drift: CGFloat
+    var color: Color  // pink or red shades
 }
 
 enum MovementStyle: CaseIterable {
@@ -35,6 +78,11 @@ struct GardenView: View {
     @State private var pads: [Pad] = []
     @State private var time: TimeInterval = 0  // for wave calculations
     @State private var cycleIndex: Int = 0  // which pad to cycle next when we have 5
+    @State private var dustParticles: [DustParticle] = []  // floating dust particles
+    @State private var fireflies: [Firefly] = []  // magical fireflies
+    @State private var waterRipples: [WaterRipple] = []  // water ripples from taps
+    @State private var rosePetals: [RosePetal] = []  // falling rose petals
+    @State private var breathingIntensity: CGFloat = 0  // breathing light effect
     
     // Single timer for organic movements
     let timer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
@@ -52,23 +100,71 @@ struct GardenView: View {
                     .frame(width: geo.size.width, height: geo.size.height)
                     .clipped()
                     .ignoresSafeArea()
+                
+                // Warm color overlay (subtle peachy/golden tint)
+                Color(red: 1.0, green: 0.95, blue: 0.85)
+                    .opacity(0.08 + breathingIntensity * 0.02)  // breathing effect
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                
+                // Vignette (darker edges for cozy feel)
+                RadialGradient(
+                    colors: [
+                        Color.clear,
+                        Color.black.opacity(0.3)
+                    ],
+                    center: .center,
+                    startRadius: geo.size.width * 0.3,
+                    endRadius: geo.size.width * 0.7
+                )
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
 
                 // Tap zone (your pool water shape)
                 PoolWaterHitShape()
                     .fill(.clear)
                     .contentShape(PoolWaterHitShape())
-                    .onTapGesture {
+                    .onTapGesture { location in
                         // 1) show poem
                         currentPoem = PoemLibrary.poems.randomElement()
-                        showPoem = (currentPoem != nil)
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                            showPoem = (currentPoem != nil)
+                        }
 
                         // 2) add a new pad
                         addNewPad()
+                        
+                        // 3) create water ripple at tap location
+                        createWaterRipple(at: CGPoint(x: location.x, y: location.y))
+                        
+                        // 4) spawn rose petal burst when poem appears
+                        if currentPoem != nil {
+                            for _ in 0..<4 {  // burst of 4 petals
+                                spawnRosePetal(screenSize: geo.size)
+                            }
+                        }
+                        
+                        // 5) make nearby lily pads bob
+                        bobNearbyPads(tapLocation: CGPoint(
+                            x: location.x / geo.size.width,
+                            y: location.y / geo.size.height
+                        ))
                     }
 
                 // Optional: debug the pool hit shape
                 // PoolWaterHitShape()
                 //     .stroke(.white.opacity(0.8), lineWidth: 2)
+                
+                // Water ripples (on pool surface)
+                ForEach(waterRipples) { ripple in
+                    Circle()
+                        .stroke(
+                            Color.cyan.opacity(ripple.opacity),  // cyan is more visible
+                            lineWidth: 1.2
+                        )
+                        .frame(width: ripple.radius * 2, height: ripple.radius * 2)
+                        .position(ripple.center)
+                }
 
                 // Render pads (on top of the water)
                 ForEach(pads) { pad in
@@ -76,28 +172,83 @@ struct GardenView: View {
                     let half = size / 2
 
                     let rawX = pad.anchor.x * geo.size.width
-                    let rawY = pad.anchor.y * geo.size.height
+                    let rawY = pad.anchor.y * geo.size.height + pad.bobOffset
 
                     let x = min(max(rawX, half), geo.size.width - half)
                     let y = min(max(rawY, half), geo.size.height - half)
 
-                    Image(pad.isLotus ? "LotusFull" : "LilyPad")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: size, height: size)
-                        .position(x: x, y: y)
-                        .transition(.scale.combined(with: .opacity))
-                        .animation(.easeInOut(duration: 2.5), value: pad.anchor)  // increased from 1.2 for slower, dreamier movement
-                        .animation(.easeInOut(duration: 0.5), value: pad.isLotus)  // Smooth transformation
+                    ZStack {
+                        // Lotus glow effect (when transforming)
+                        if pad.isLotus && pad.glowIntensity > 0 {
+                            Circle()
+                                .fill(
+                                    RadialGradient(
+                                        colors: [
+                                            Color(red: 1.0, green: 0.9, blue: 0.6).opacity(pad.glowIntensity * 0.6),
+                                            Color.clear
+                                        ],
+                                        center: .center,
+                                        startRadius: 0,
+                                        endRadius: size * 0.8
+                                    )
+                                )
+                                .frame(width: size * 1.6, height: size * 1.6)
+                        }
+                        
+                        Image(pad.isLotus ? "LotusFull" : "LilyPad")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: size, height: size)
+                    }
+                    .position(x: x, y: y)
+                    .transition(.scale.combined(with: .opacity))
+                    .animation(.easeInOut(duration: 2.5), value: pad.anchor)
+                    .animation(.easeInOut(duration: 0.5), value: pad.isLotus)
+                }
+                
+                // Rose petals (falling through the air)
+                ForEach(rosePetals) { petal in
+                    Ellipse()
+                        .fill(petal.color.opacity(petal.opacity))
+                        .frame(width: petal.size * 1.5, height: petal.size)
+                        .rotationEffect(.degrees(petal.rotation))
+                        .blur(radius: 0.5)
+                        .position(petal.position)
+                }
+                
+                // Fireflies (magical floating lights)
+                ForEach(fireflies) { firefly in
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color(red: 1.0, green: 0.95, blue: 0.7).opacity(firefly.opacity),
+                                    Color(red: 1.0, green: 0.9, blue: 0.6).opacity(firefly.opacity * 0.5),
+                                    Color.clear
+                                ],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: firefly.size
+                            )
+                        )
+                        .frame(width: firefly.size * 2, height: firefly.size * 2)
+                        .blur(radius: firefly.size * 0.3)
+                        .position(firefly.position)
                 }
 
-                if showPoem, let poem = currentPoem {
-                    Color.black.opacity(0.4)
+                // Poem overlay - keep in hierarchy for animation
+                if let poem = currentPoem {
+                    Color.black.opacity(showPoem ? 0.4 : 0)
                         .ignoresSafeArea()
                         .onTapGesture {
-                            showPoem = false
-                            currentPoem = nil
+                            withAnimation(.easeOut(duration: 0.4)) {
+                                showPoem = false
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                                currentPoem = nil
+                            }
                         }
+                        .allowsHitTesting(showPoem)  // only allow taps when visible
 
                     PoemOverlayView(
                         persian: poem.persian,
@@ -105,17 +256,57 @@ struct GardenView: View {
                         culturalNote: poem.culturalNote,
                         reflection: poem.reflection
                     )
-                    .transition(.scale.combined(with: .opacity))
+                    .opacity(showPoem ? 1 : 0)
+                    .scaleEffect(showPoem ? 1 : 0.95)
+                }
+                
+                // Dust particles layer (on top of everything)
+                ForEach(dustParticles) { particle in
+                    Circle()
+                        .fill(Color.white.opacity(particle.opacity))
+                        .frame(width: particle.size, height: particle.size)
+                        .blur(radius: particle.size * 0.15)  // reduced blur from 0.2 for sharper visibility
+                        .shadow(color: .white.opacity(particle.opacity * 0.5), radius: particle.size * 0.5)  // add glow
+                        .position(particle.position)
                 }
             }
-            .animation(.spring(), value: showPoem)
         }
         .ignoresSafeArea()
+        .onAppear {
+            // Initialize dust particles
+            initializeDustParticles(screenSize: UIScreen.main.bounds.size)
+            // Initialize more rose petals
+            for _ in 0..<5 {
+                spawnRosePetal(screenSize: UIScreen.main.bounds.size, randomY: true)
+            }
+            // Initialize fireflies
+            for _ in 0..<10 {
+                spawnFirefly(screenSize: UIScreen.main.bounds.size, randomY: true)
+            }
+        }
         .onReceive(timer) { _ in
             time += 0.05
             
+            // Update breathing light effect (gentle pulsing)
+            breathingIntensity = sin(time * 0.3) * 0.5 + 0.5  // oscillates 0...1
+            
             for index in pads.indices {
                 let pad = pads[index]
+                
+                // Update lily pad bob physics (spring damping)
+                if abs(pads[index].bobOffset) > 0.01 || abs(pads[index].bobVelocity) > 0.01 {
+                    pads[index].bobVelocity += -pads[index].bobOffset * 0.3  // spring force
+                    pads[index].bobVelocity *= 0.85  // damping
+                    pads[index].bobOffset += pads[index].bobVelocity
+                } else {
+                    pads[index].bobOffset = 0
+                    pads[index].bobVelocity = 0
+                }
+                
+                // Fade out lotus glow
+                if pads[index].glowIntensity > 0 {
+                    pads[index].glowIntensity = max(0, pads[index].glowIntensity - 0.015)
+                }
                 
                 // Calculate desired movement based on style
                 let movement = calculateMovement(for: pad, time: time)
@@ -160,7 +351,7 @@ struct GardenView: View {
                 
                 // Get new target more frequently to keep pads wandering
                 let distToTarget = distance(pad.anchor, pad.targetAnchor)
-                if distToTarget < 0.04 || Int(time * 20) % 200 == index * 40 {  // reach target OR every ~10 seconds per pad
+                if distToTarget < 0.04 || Int(time * 20) % 200 == index * 40 {
                     pads[index].targetAnchor = randomPointInPool()
                     // Occasionally change movement style for variety
                     if Double.random(in: 0...1) < 0.15 {
@@ -169,7 +360,157 @@ struct GardenView: View {
                     }
                 }
             }
+            
+            // Update dust particles
+            updateDustParticles(screenSize: UIScreen.main.bounds.size)
+            
+            // Update fireflies
+            updateFireflies(screenSize: UIScreen.main.bounds.size)
+            
+            // Update water ripples
+            updateWaterRipples()
+            
+            // Update rose petals
+            updateRosePetals(screenSize: UIScreen.main.bounds.size)
         }
+    }
+    
+    // Initialize dust particles
+    private func initializeDustParticles(screenSize: CGSize) {
+        dustParticles.removeAll()
+        // Create initial particles spread across the screen
+        for _ in 0..<80 {  // increased from 60 for more visible effect
+            dustParticles.append(createDustParticle(screenSize: screenSize, randomY: true))
+        }
+    }
+    
+    // Create a single dust particle
+    private func createDustParticle(screenSize: CGSize, randomY: Bool = false) -> DustParticle {
+        return DustParticle(
+            position: CGPoint(
+                x: CGFloat.random(in: 0...screenSize.width),
+                y: randomY ? CGFloat.random(in: 0...screenSize.height) : CGFloat.random(in: -50...0)
+            ),
+            size: CGFloat.random(in: 3...7),  // increased from 2...5 for much better visibility
+            opacity: Double.random(in: 0.5...0.8),  // increased from 0.3...0.6 for much better visibility
+            speed: CGFloat.random(in: 0.2...0.6),
+            drift: CGFloat.random(in: -0.8...0.8)
+        )
+    }
+    
+    // Update dust particles (move down and recycle)
+    private func updateDustParticles(screenSize: CGSize) {
+        for index in dustParticles.indices {
+            // Move particle down
+            dustParticles[index].position.y += dustParticles[index].speed
+            
+            // Add gentle left-to-right swaying motion
+            let sway = sin(time * 0.5 + CGFloat(index) * 0.3) * 0.8  // gentle wave motion
+            dustParticles[index].position.x += dustParticles[index].drift + sway
+            
+            // Recycle particle when it goes off screen
+            if dustParticles[index].position.y > screenSize.height + 50 {
+                dustParticles[index] = createDustParticle(screenSize: screenSize)
+            }
+        }
+    }
+    
+    // MARK: - Water Ripples
+    
+    private func createWaterRipple(at position: CGPoint) {
+        // Create visible but subtle ripples
+        for i in 0..<2 {
+            let ripple = WaterRipple(
+                center: position,
+                radius: 15,
+                opacity: 0.4 - Double(i) * 0.1,  // visible opacity
+                createdAt: Date().addingTimeInterval(Double(i) * 0.08)
+            )
+            waterRipples.append(ripple)
+        }
+    }
+    
+    private func updateWaterRipples() {
+        let now = Date()
+        waterRipples = waterRipples.filter { ripple in
+            now.timeIntervalSince(ripple.createdAt) < 1.2
+        }
+        
+        for index in waterRipples.indices {
+            let age = now.timeIntervalSince(waterRipples[index].createdAt)
+            // Gentle expansion
+            waterRipples[index].radius = 15 + CGFloat(age) * 40
+            // Smooth fade
+            waterRipples[index].opacity = max(0, waterRipples[index].opacity - age * 0.35)
+        }
+    }
+    
+    // MARK: - Rose Petals
+    
+    private func spawnRosePetal(screenSize: CGSize, randomY: Bool = false) {
+        let colors: [Color] = [
+            Color(red: 0.9, green: 0.3, blue: 0.4),  // deep pink
+            Color(red: 1.0, green: 0.4, blue: 0.5),  // light pink
+            Color(red: 0.8, green: 0.2, blue: 0.3)   // dark rose
+        ]
+        
+        let petal = RosePetal(
+            position: CGPoint(
+                x: CGFloat.random(in: 0...screenSize.width),
+                y: randomY ? CGFloat.random(in: 0...screenSize.height) : CGFloat.random(in: -50...0)
+            ),
+            rotation: CGFloat.random(in: 0...360),
+            rotationSpeed: CGFloat.random(in: 0.5...2),
+            size: CGFloat.random(in: 8...15),
+            opacity: Double.random(in: 0.6...0.9),
+            speed: CGFloat.random(in: 0.3...0.7),
+            drift: CGFloat.random(in: -0.5...0.5),
+            color: colors.randomElement()!
+        )
+        rosePetals.append(petal)
+        
+        // Keep max 12 petals (increased from 8)
+        if rosePetals.count > 12 {
+            rosePetals.removeFirst()
+        }
+    }
+    
+    private func updateRosePetals(screenSize: CGSize) {
+        for index in rosePetals.indices {
+            // Move petal down
+            rosePetals[index].position.y += rosePetals[index].speed
+            
+            // Horizontal drift and sway
+            let sway = sin(time * 0.4 + CGFloat(index) * 0.5) * 1.2
+            rosePetals[index].position.x += rosePetals[index].drift + sway
+            
+            // Rotate as it falls
+            rosePetals[index].rotation += rosePetals[index].rotationSpeed
+            
+            // Recycle when off screen
+            if rosePetals[index].position.y > screenSize.height + 50 {
+                rosePetals[index] = createRosePetal(screenSize: screenSize)
+            }
+        }
+    }
+    
+    private func createRosePetal(screenSize: CGSize) -> RosePetal {
+        let colors: [Color] = [
+            Color(red: 0.9, green: 0.3, blue: 0.4),
+            Color(red: 1.0, green: 0.4, blue: 0.5),
+            Color(red: 0.8, green: 0.2, blue: 0.3)
+        ]
+        
+        return RosePetal(
+            position: CGPoint(x: CGFloat.random(in: 0...screenSize.width), y: -20),
+            rotation: CGFloat.random(in: 0...360),
+            rotationSpeed: CGFloat.random(in: 0.5...2),
+            size: CGFloat.random(in: 8...15),
+            opacity: Double.random(in: 0.6...0.9),
+            speed: CGFloat.random(in: 0.3...0.7),
+            drift: CGFloat.random(in: -0.5...0.5),
+            color: colors.randomElement()!
+        )
     }
     
     // Calculate movement vector based on pad's style
@@ -263,13 +604,25 @@ struct GardenView: View {
                     targetAnchor: randomPointInPool(),
                     movementStyle: MovementStyle.allCases.randomElement()!,
                     phase: CGFloat.random(in: 0...(2 * .pi)),
-                    speed: CGFloat.random(in: 0.7...1.2)  // reduced range from 0.5...1.5 for more uniform speed
+                    speed: CGFloat.random(in: 0.7...1.2)
                 )
                 pads.append(newPad)
             }
         } else {
-            // Convert the last lily pad to lotus
+            // Convert the last lily pad to lotus with glow effect
             pads[pads.count - 1].isLotus = true
+            pads[pads.count - 1].glowIntensity = 1.0  // full glow
+        }
+    }
+    
+    // Make nearby lily pads bob when tapped
+    private func bobNearbyPads(tapLocation: CGPoint) {
+        for index in pads.indices {
+            let dist = distance(pads[index].anchor, tapLocation)
+            if dist < 0.2 {  // within range
+                let strength = (0.2 - dist) / 0.2  // stronger when closer
+                pads[index].bobVelocity = -3.0 * strength  // initial downward velocity
+            }
         }
     }
     
@@ -355,6 +708,59 @@ struct GardenView: View {
                 )
             }
             return vertex
+        }
+    }
+    
+    // MARK: - Fireflies
+    
+    private func spawnFirefly(screenSize: CGSize, randomY: Bool = false) {
+        let baseOp = Double.random(in: 0.4...0.7)
+        let firefly = Firefly(
+            position: CGPoint(
+                x: CGFloat.random(in: 0...screenSize.width),
+                y: randomY ? CGFloat.random(in: screenSize.height * 0.3...screenSize.height) : screenSize.height + 20
+            ),
+            size: CGFloat.random(in: 3...6),
+            opacity: baseOp,
+            baseOpacity: baseOp,
+            twinklePhase: CGFloat.random(in: 0...(2 * .pi)),
+            speed: CGFloat.random(in: 0.15...0.35),
+            drift: CGFloat.random(in: -0.4...0.4)
+        )
+        fireflies.append(firefly)
+        
+        // Keep max 12 fireflies
+        if fireflies.count > 12 {
+            fireflies.removeFirst()
+        }
+    }
+    
+    private func updateFireflies(screenSize: CGSize) {
+        for index in fireflies.indices {
+            // Move firefly upward (opposite of falling particles)
+            fireflies[index].position.y -= fireflies[index].speed
+            
+            // Horizontal drift and sway
+            let sway = sin(time * 0.3 + CGFloat(index) * 0.4) * 0.6
+            fireflies[index].position.x += fireflies[index].drift + sway
+            
+            // Twinkling effect
+            let twinkle = sin(time * 2 + fireflies[index].twinklePhase) * 0.5 + 0.5
+            fireflies[index].opacity = fireflies[index].baseOpacity * (0.5 + twinkle * 0.5)
+            
+            // Recycle when off screen (top)
+            if fireflies[index].position.y < -50 {
+                let baseOp = Double.random(in: 0.4...0.7)
+                fireflies[index] = Firefly(
+                    position: CGPoint(x: CGFloat.random(in: 0...screenSize.width), y: screenSize.height + 20),
+                    size: CGFloat.random(in: 3...6),
+                    opacity: baseOp,
+                    baseOpacity: baseOp,
+                    twinklePhase: CGFloat.random(in: 0...(2 * .pi)),
+                    speed: CGFloat.random(in: 0.15...0.35),
+                    drift: CGFloat.random(in: -0.4...0.4)
+                )
+            }
         }
     }
     

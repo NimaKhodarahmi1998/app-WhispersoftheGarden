@@ -57,6 +57,6 @@ struct PoemOverlayView: View {
                 ? .opacity
                 : .opacity.combined(with: .scale(scale: 0.50))
             )
-        }.border(.red)
+        }
     }
 }
