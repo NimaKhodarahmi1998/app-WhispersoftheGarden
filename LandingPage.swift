@@ -44,7 +44,7 @@ struct LandingPage: View {
                         
                         NavigationLink {
                             
-                            GardenView()
+                            MainAppView()
                         } label: {
                             ZStack{
                                 Image(uiImage: UIImage(named: "Button1.PNG")!)
