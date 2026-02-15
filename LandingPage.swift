@@ -52,37 +52,19 @@ struct LandingPage: View {
                                     .scaledToFit()
                                     .frame (width: min(geometry.size.width * 0.8 , 400))
                                 
-                                ZStack {
-                                    Text("Enter Your Garden")
-                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                        .fontWeight(.black)
-                                        .foregroundColor(.black)
-                                        .offset(x: -2, y: -2)
-
-                                    Text("Enter Your Garden")
-                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                        .fontWeight(.black)
-                                        .foregroundColor(.black)
-                                        .offset(x: 2, y: -2)
-
-                                    Text("Enter Your Garden")
-                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                        .fontWeight(.black)
-                                        .foregroundColor(.black)
-                                        .offset(x: -2, y: 2)
-
-                                    Text("Enter Your Garden")
-                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                        .fontWeight(.black)
-                                        .foregroundColor(.black)
-                                        .offset(x: 2, y: 2)
-
-                                    Text("Enter Your Garden")
-                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                        .fontWeight(.black)
-                                        .foregroundColor(.white)
-                                }
-                                .minimumScaleFactor(0.6)
+                                Text("Enter Your Garden")
+                                    .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                    .fontWeight(.black)
+                                    .foregroundColor(.white)
+                                    .shadow(color: .black, radius: 0, x: -1, y: -1)
+                                    .shadow(color: .black, radius: 0, x: 1, y: -1)
+                                    .shadow(color: .black, radius: 0, x: -1, y: 1)
+                                    .shadow(color: .black, radius: 0, x: 1, y: 1)
+                                    .shadow(color: .black, radius: 0, x: 0, y: -1)
+                                    .shadow(color: .black, radius: 0, x: 0, y: 1)
+                                    .shadow(color: .black, radius: 0, x: -1, y: 0)
+                                    .shadow(color: .black, radius: 0, x: 1, y: 0)
+                                    .minimumScaleFactor(0.6)
 
                             }
                         }
@@ -96,37 +78,19 @@ struct LandingPage: View {
                                     .scaledToFit()
                                     .frame (width: min(geometry.size.width * 0.8 , 400))
                                 
-                                ZStack {
-                                    Text("Options")
-                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                        .fontWeight(.black)
-                                        .foregroundColor(.black)
-                                        .offset(x: -2, y: -2)
-
-                                    Text("Options")
-                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                        .fontWeight(.black)
-                                        .foregroundColor(.black)
-                                        .offset(x: 2, y: -2)
-
-                                    Text("Options")
-                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                        .fontWeight(.black)
-                                        .foregroundColor(.black)
-                                        .offset(x: -2, y: 2)
-
-                                    Text("Options")
-                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                        .fontWeight(.black)
-                                        .foregroundColor(.black)
-                                        .offset(x: 2, y: 2)
-
-                                    Text("Options")
-                                        .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                        .fontWeight(.black)
-                                        .foregroundColor(.white)
-                                }
-                                .minimumScaleFactor(0.6)
+                                Text("Options")
+                                    .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
+                                    .fontWeight(.black)
+                                    .foregroundColor(.white)
+                                    .shadow(color: .black, radius: 0, x: -1, y: -1)
+                                    .shadow(color: .black, radius: 0, x: 1, y: -1)
+                                    .shadow(color: .black, radius: 0, x: -1, y: 1)
+                                    .shadow(color: .black, radius: 0, x: 1, y: 1)
+                                    .shadow(color: .black, radius: 0, x: 0, y: -1)
+                                    .shadow(color: .black, radius: 0, x: 0, y: 1)
+                                    .shadow(color: .black, radius: 0, x: -1, y: 0)
+                                    .shadow(color: .black, radius: 0, x: 1, y: 0)
+                                    .minimumScaleFactor(0.6)
                             }
                         }
                         Spacer()
@@ -149,62 +113,58 @@ struct LandingPage: View {
     
     
     
-    struct LoopingVideoPlayer: UIViewControllerRepresentable {
+    struct LoopingVideoPlayer: UIViewRepresentable {
         let videoName: String
         let videoExt: String
         
-        func makeUIViewController(context: Context) -> AVPlayerViewController {
-            let controller = AVPlayerViewController()
+        func makeUIView(context: Context) -> PlayerView {
+            return PlayerView(videoName: videoName, videoExt: videoExt)
+        }
+        
+        func updateUIView(_ uiView: PlayerView, context: Context) {
+            uiView.updatePlayerLayerFrame()
+        }
+        
+        class PlayerView: UIView {
+            private var player: AVPlayer?
+            private var playerLayer: AVPlayerLayer?
             
-            guard let url = Bundle.main.url(forResource: videoName, withExtension: videoExt) else {
-                print("❌ Video not found")
-                return controller
+            init(videoName: String, videoExt: String) {
+                super.init(frame: .zero)
+                
+                guard let url = Bundle.main.url(forResource: videoName, withExtension: videoExt) else {
+                    backgroundColor = UIColor(red: 0/255, green: 32/255, blue: 72/255, alpha: 1)
+                    return
+                }
+                
+                let player = AVPlayer(url: url)
+                let playerLayer = AVPlayerLayer(player: player)
+                
+                playerLayer.videoGravity = .resizeAspectFill
+                layer.addSublayer(playerLayer)
+                
+                self.player = player
+                self.playerLayer = playerLayer
+                
+                backgroundColor = UIColor(red: 0/255, green: 32/255, blue: 72/255, alpha: 1)
+                
+                // Configure player
+                player.isMuted = true
+                player.play()
             }
             
-            print("✅ Loading video from: \(url)")
+            required init?(coder: NSCoder) {
+                fatalError("init(coder:) has not been implemented")
+            }
             
-            let playerItem = AVPlayerItem(url: url)
-            let player = AVPlayer(playerItem: playerItem)
+            override func layoutSubviews() {
+                super.layoutSubviews()
+                playerLayer?.frame = bounds
+            }
             
-            // Configure player
-            player.isMuted = true
-            player.actionAtItemEnd = .pause // Pause at end instead of showing controls
-            
-            // Configure controller
-            controller.player = player
-            controller.showsPlaybackControls = true
-            controller.allowsPictureInPicturePlayback = false
-            controller.updatesNowPlayingInfoCenter = false
-            controller.entersFullScreenWhenPlaybackBegins = false
-            controller.exitsFullScreenWhenPlaybackEnds = false
-            
-            // Additional: Remove all interactive elements
-            controller.view.isUserInteractionEnabled = false
-            
-            controller.view.backgroundColor = UIColor(
-                red: 0/255,
-                green: 32/255,
-                blue: 72/255,
-                alpha: 1
-            )
-            
-            // Start playing
-            player.play()
-            
-            print("✅ Player started")
-            
-            return controller
-        }
-        
-        func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
-            // Nothing needed here
-        }
-        
-        func makeCoordinator() -> Coordinator {
-            Coordinator()
-        }
-        
-        class Coordinator {
+            func updatePlayerLayerFrame() {
+                playerLayer?.frame = bounds
+            }
         }
     }
 }

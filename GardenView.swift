@@ -72,6 +72,7 @@ enum MovementStyle: CaseIterable {
 import SwiftUI
 
 struct GardenView: View {
+    
     @State private var showPoem = false
     @State private var currentPoem: Poem?
 

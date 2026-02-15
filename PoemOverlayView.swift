@@ -13,6 +13,11 @@ struct PoemOverlayView: View {
     let culturalNote: String
     let reflection: String
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    
+    var isIPad: Bool {
+        horizontalSizeClass == .regular
+    }
     
     var body: some View {
         ZStack{
@@ -25,26 +30,26 @@ struct PoemOverlayView: View {
             
             VStack(spacing: 20) {
                 Text(persian)
-                    .font(.system(size: 24, weight: .medium))
+                    .font(.system(size: isIPad ? 28 : 12, weight: .medium))
                     .multilineTextAlignment(.center)
                     .foregroundColor(Color.persianIndigo)
                 
                 Text(english)
-                    .font(.system(size: 16))
+                    .font(.system(size: isIPad ? 20 : 8))
                     .italic()
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.persianIndigo.opacity(0.7))
                 
                 Divider()
-                   // .padding(.vertical, 2)
+                   .padding(.vertical, 2)
                 
                 Text(culturalNote)
-                    .font(.system(size: 14))
+                    .font(.system(size: isIPad ? 20 : 8))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.persianIndigo.opacity(0.75))
                 
                 Text(reflection)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: isIPad ? 20 : 8, weight: .medium))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.persianIndigo)
                     .padding(.top, 4)
