@@ -20,7 +20,7 @@ let package = Package(
             teamIdentifier: "HT99YC33BT",
             displayVersion: "1.0",
             bundleVersion: "1",
-            appIcon: .placeholder(icon: .sun),
+            appIcon: .asset("AppIcon"),
             accentColor: .presetColor(.teal),
             supportedDeviceFamilies: [
                 .pad,
