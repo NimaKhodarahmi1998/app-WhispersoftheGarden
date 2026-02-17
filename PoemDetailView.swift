@@ -29,32 +29,8 @@ struct PoemDetailView: View {
                         .padding(.top, 12)
                         .accessibilityLabel("Poet: \(poem.poet)")
 
-                    // Original Persian
-                    VStack(spacing: 8) {
-                        Text("Original")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.white.opacity(0.35))
-                            .textCase(.uppercase)
-                            .tracking(1.5)
-
-                        Text(poem.persian)
-                            .font(.system(size: 22, weight: .medium, design: .serif))
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(gold)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Original Persian: \(poem.persian)")
-
-                    // Divider
-                    Rectangle()
-                        .fill(rose.opacity(0.2))
-                        .frame(height: 0.5)
-                        .padding(.horizontal, 40)
-
                     // English Translation
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(spacing: 8) {
                         Text("Translation")
                             .font(.caption)
                             .fontWeight(.semibold)
@@ -63,13 +39,39 @@ struct PoemDetailView: View {
                             .tracking(1.5)
 
                         Text(poem.english)
-                            .font(.system(size: 16, design: .serif))
+                            .font(.system(size: 22, weight: .medium, design: .serif))
                             .italic()
-                            .foregroundStyle(.white.opacity(0.85))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(gold)
                             .lineSpacing(4)
                     }
+                    .frame(maxWidth: .infinity)
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("Translation: \(poem.english)")
+
+                    // Divider
+                    Rectangle()
+                        .fill(rose.opacity(0.2))
+                        .frame(height: 0.5)
+                        .padding(.horizontal, 40)
+
+                    // Original Persian
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Original")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white.opacity(0.35))
+                            .textCase(.uppercase)
+                            .tracking(1.5)
+
+                        Text(poem.persian)
+                            .font(.system(size: 16, weight: .medium, design: .serif))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityHidden(true)
 
                     // Cultural Note
                     VStack(alignment: .leading, spacing: 8) {

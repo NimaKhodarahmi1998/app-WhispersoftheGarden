@@ -73,23 +73,23 @@ struct ContentView: View {
                 try? await Task.sleep(for: .milliseconds(400))
                 isTransitioning = false
             } else {
-                // Phase 1: Petals sweep in
-                try? await Task.sleep(for: .milliseconds(700))
+                // Phase 1: Petals build up
+                try? await Task.sleep(for: .milliseconds(900))
 
                 // Phase 2: Create garden, cross-dissolve in
                 gardenReady = true
                 gardenOpacity = 0
 
-                withAnimation(.easeInOut(duration: 0.8)) {
+                withAnimation(.easeInOut(duration: 1.0)) {
                     gardenOpacity = 1.0
                 }
 
                 // Phase 3: Remove landing page
-                try? await Task.sleep(for: .milliseconds(900))
+                try? await Task.sleep(for: .milliseconds(1100))
                 landingVisible = false
 
                 // Phase 4: Petals finish drifting
-                try? await Task.sleep(for: .milliseconds(800))
+                try? await Task.sleep(for: .milliseconds(1000))
                 isTransitioning = false
             }
         }
@@ -111,22 +111,22 @@ struct ContentView: View {
                 try? await Task.sleep(for: .milliseconds(400))
                 isTransitioning = false
             } else {
-                // Phase 1: Petals sweep in
-                try? await Task.sleep(for: .milliseconds(700))
+                // Phase 1: Petals build up
+                try? await Task.sleep(for: .milliseconds(900))
 
                 // Phase 2: Cross-dissolve garden out, bring landing back
                 landingVisible = true
 
-                withAnimation(.easeInOut(duration: 0.8)) {
+                withAnimation(.easeInOut(duration: 1.0)) {
                     gardenOpacity = 0
                 }
 
                 // Phase 3: Remove garden
-                try? await Task.sleep(for: .milliseconds(900))
+                try? await Task.sleep(for: .milliseconds(1100))
                 gardenReady = false
 
                 // Phase 4: Petals finish drifting
-                try? await Task.sleep(for: .milliseconds(800))
+                try? await Task.sleep(for: .milliseconds(1000))
                 isTransitioning = false
             }
         }

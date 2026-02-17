@@ -25,14 +25,16 @@ struct MainAppView: View {
 
     var body: some View {
         ZStack {
-            // Content
+            // Content — cross-fade between tabs
             Group {
                 if selectedTab == 0 {
                     GardenView(showMainApp: $showMainApp)
+                        .transition(.opacity)
                 } else {
                     NavigationStack {
                         LibraryView(showMainApp: $showMainApp)
                     }
+                    .transition(.opacity)
                 }
             }
 
@@ -119,17 +121,19 @@ struct MainAppView: View {
         isTabTransitioning = true
 
         Task { @MainActor in
-            // Petals cover the screen
-            try? await Task.sleep(for: .milliseconds(700))
+            // Petals build up
+            try? await Task.sleep(for: .milliseconds(900))
 
-            // Switch underneath
+            // Cross-fade underneath the petals
             if let tab = pendingTab {
-                selectedTab = tab
+                withAnimation(.easeInOut(duration: 0.8)) {
+                    selectedTab = tab
+                }
                 pendingTab = nil
             }
 
-            // Petals drift away
-            try? await Task.sleep(for: .milliseconds(1700))
+            // Petals drift away gracefully
+            try? await Task.sleep(for: .milliseconds(2100))
             isTabTransitioning = false
         }
     }

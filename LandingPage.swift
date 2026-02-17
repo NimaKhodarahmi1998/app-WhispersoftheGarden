@@ -129,8 +129,8 @@ private struct GoldOrnamentDivider: View {
             ornament
             line
         }
-        .frame(height: 20)
-        .padding(.horizontal, 40)
+        .frame(height: 10)
+        .padding(.horizontal, 60)
     }
 
     private var line: some View {
@@ -151,11 +151,11 @@ private struct GoldOrnamentDivider: View {
             // Outer diamond
             Diamond()
                 .stroke(Color(red: 0.85, green: 0.70, blue: 0.35), lineWidth: 1.2)
-                .frame(width: 14, height: 14)
+                .frame(width: 8, height: 8)
             // Inner dot
             Circle()
                 .fill(Color(red: 0.90, green: 0.75, blue: 0.40))
-                .frame(width: 4, height: 4)
+                .frame(width: 2.5, height: 2.5)
         }
     }
 }
@@ -293,7 +293,7 @@ struct LandingPage: View {
 
                     // 3. Gold ornamental divider
                     GoldOrnamentDivider()
-                        .padding(.vertical, isIPad ? 14 : 8)
+                        .padding(.vertical, isIPad ? 16 : 12)
                         .opacity(showDivider ? 1 : 0)
 
                     // Enter Your Garden button
@@ -307,17 +307,23 @@ struct LandingPage: View {
                                 .frame(width: min(geometry.size.width * 0.8, 400))
 
                             Text("Enter Your Garden")
-                                .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                .fontWeight(.black)
-                                .foregroundColor(.white)
+                                .font(.custom("Palatino-Bold", size: isIPad ? 28 : 20))
+                                .tracking(isIPad ? 2 : 1.2)
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(red: 1.0, green: 0.96, blue: 0.82),
+                                            Color(red: 0.88, green: 0.78, blue: 0.50)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
                                 .shadow(color: .black, radius: 0, x: -1, y: -1)
                                 .shadow(color: .black, radius: 0, x: 1, y: -1)
                                 .shadow(color: .black, radius: 0, x: -1, y: 1)
                                 .shadow(color: .black, radius: 0, x: 1, y: 1)
-                                .shadow(color: .black, radius: 0, x: 0, y: -1)
-                                .shadow(color: .black, radius: 0, x: 0, y: 1)
-                                .shadow(color: .black, radius: 0, x: -1, y: 0)
-                                .shadow(color: .black, radius: 0, x: 1, y: 0)
+                                .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 2)
                                 .minimumScaleFactor(0.6)
                         }
                         .persianTileStyle()
@@ -339,17 +345,23 @@ struct LandingPage: View {
                                 .frame(width: min(geometry.size.width * 0.8, 400))
 
                             Text("Options")
-                                .font(.custom("Snell Roundhand", size: isIPad ? 35 : 25))
-                                .fontWeight(.black)
-                                .foregroundColor(.white)
+                                .font(.custom("Palatino-Bold", size: isIPad ? 28 : 20))
+                                .tracking(isIPad ? 2 : 1.2)
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(red: 1.0, green: 0.96, blue: 0.82),
+                                            Color(red: 0.88, green: 0.78, blue: 0.50)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
                                 .shadow(color: .black, radius: 0, x: -1, y: -1)
                                 .shadow(color: .black, radius: 0, x: 1, y: -1)
                                 .shadow(color: .black, radius: 0, x: -1, y: 1)
                                 .shadow(color: .black, radius: 0, x: 1, y: 1)
-                                .shadow(color: .black, radius: 0, x: 0, y: -1)
-                                .shadow(color: .black, radius: 0, x: 0, y: 1)
-                                .shadow(color: .black, radius: 0, x: -1, y: 0)
-                                .shadow(color: .black, radius: 0, x: 1, y: 0)
+                                .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 2)
                                 .minimumScaleFactor(0.6)
                         }
                         .persianTileStyle()
@@ -363,11 +375,11 @@ struct LandingPage: View {
 
                     // 4. Persian poetry quote — Hafez
                     VStack(spacing: 4) {
-                        Text("رسید مژده که ایام غم نخواهد ماند")
-                            .font(.system(size: isIPad ? 16 : 12))
                         Text("Glad tidings — the days of sorrow shall not last")
-                            .font(.system(size: isIPad ? 12 : 9, design: .serif))
+                            .font(.system(size: isIPad ? 14 : 11, design: .serif))
                             .italic()
+                        Text("رسید مژده که ایام غم نخواهد ماند")
+                            .font(.system(size: isIPad ? 12 : 9))
                         Text("— Hafez")
                             .font(.system(size: isIPad ? 10 : 7, design: .serif))
                     }
