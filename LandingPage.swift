@@ -301,7 +301,7 @@ struct LandingPage: View {
                         showMainApp = true
                     } label: {
                         ZStack {
-                            Image(uiImage: UIImage(named: "Button1.PNG")!)
+                            Image("Button1")
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: min(geometry.size.width * 0.8, 400))
@@ -339,7 +339,7 @@ struct LandingPage: View {
                         showOptions = true
                     } label: {
                         ZStack {
-                            Image(uiImage: UIImage(named: "Button2.PNG")!)
+                            Image("Button2")
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: min(geometry.size.width * 0.8, 400))
