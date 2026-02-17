@@ -1,8 +1,8 @@
 //
-//  GardenView.swift - POOL BOUNDARIES FIXED
+//  GardenView.swift - COMPLETE WITH BACK BUTTON
 //  WhispersoftheGardenApp
 //
-//  Lily pads only appear IN THE POOL where they should be!
+//  Lily pads in pool + Lotus bloom reveals poem + Back button
 //
 
 import SwiftUI
@@ -19,15 +19,6 @@ struct Pad: Identifiable {
     var bobVelocity: CGFloat = 0
     var glowIntensity: CGFloat = 0
     var storedPoem: Poem?
-}
-
-struct DustParticle: Identifiable {
-    let id = UUID()
-    var position: CGPoint
-    var size: CGFloat
-    var opacity: Double
-    var speed: CGFloat
-    var drift: CGFloat
 }
 
 struct Firefly: Identifiable {
@@ -49,55 +40,64 @@ struct WaterRipple: Identifiable {
     var createdAt: Date
 }
 
-struct RosePetal: Identifiable {
-    let id = UUID()
-    var position: CGPoint
-    var rotation: CGFloat
-    var rotationSpeed: CGFloat
-    var size: CGFloat
-    var opacity: Double
-    var speed: CGFloat
-    var drift: CGFloat
-    var color: Color
-}
-
 enum MovementStyle: CaseIterable {
     case gentle, wavy, circular, zigzag, stillness
 }
 
 struct GardenView: View {
     @EnvironmentObject var revealedPoemsStore: RevealedPoemsStore
-    
+    @Binding var showMainApp: Bool  // ✅ ADDED: For back button
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
+
     @State private var showPoem = false
     @State private var currentPoem: Poem?
     @State private var pads: [Pad] = []
     @State private var time: TimeInterval = 0
-    @State private var dustParticles: [DustParticle] = []
     @State private var fireflies: [Firefly] = []
     @State private var waterRipples: [WaterRipple] = []
-    @State private var rosePetals: [RosePetal] = []
+    @State private var petalBurst = 0
     @State private var breathingIntensity: CGFloat = 0
-    
-    let timer = Timer.publish(every: 0.08, on: .main, in: .common).autoconnect()
+
+    // Nightingale state
+    @State private var showNightingale = false
+    @State private var nightingalePosition: CGPoint = CGPoint(x: 0.12, y: 0.82)
+    @State private var nightingalePerchIndex = 0
+    @State private var nightingaleIsPerched = true
+    @State private var nightingaleFacingRight = true
+    @State private var nightingaleCoupletIndex = 0
+    @State private var showNightingaleCouplet = false
+    @State private var currentNightingaleCouplet: Poem?
+    @State private var nightingaleAppearOpacity: Double = 0
+
+    // Perch positions on land (cobblestone & garden bed, alternating left/right)
+    private let nightingalePerchPositions: [CGPoint] = [
+        CGPoint(x: 0.12, y: 0.82),   // left cobblestone, near flower pot
+        CGPoint(x: 0.55, y: 0.48),   // garden bed, center bush
+        CGPoint(x: 0.22, y: 0.52),   // near the stairs
+        CGPoint(x: 0.70, y: 0.45)    // garden bed, right side
+    ]
+
+    @State private var lastUpdateTime: Date?
+    let timer = Timer.publish(every: 1.0/60.0, on: .main, in: .common).autoconnect()
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 Color.black
                     .ignoresSafeArea()
-                
+
                 Image("GardenView")
                     .resizable()
                     .scaledToFill()
                     .frame(width: geo.size.width, height: geo.size.height)
                     .clipped()
                     .ignoresSafeArea()
-                
+
                 Color(red: 1.0, green: 0.95, blue: 0.85)
                     .opacity(0.08 + breathingIntensity * 0.02)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
-                
+
                 RadialGradient(
                     colors: [Color.clear, Color.black.opacity(0.3)],
                     center: .center,
@@ -107,14 +107,16 @@ struct GardenView: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
-                // ✅ POOL SHAPE - Only taps in pool register
                 PoolWaterHitShape()
                     .fill(.clear)
                     .contentShape(PoolWaterHitShape())
                     .onTapGesture { location in
                         handleTap(at: location, in: geo.size)
                     }
-                
+                    .accessibilityLabel("Garden pool")
+                    .accessibilityHint("Double tap to create a lily pad")
+                    .accessibilityAddTraits(.isButton)
+
                 ForEach(waterRipples) { ripple in
                     Circle()
                         .stroke(Color.cyan.opacity(ripple.opacity), lineWidth: 1.2)
@@ -125,16 +127,26 @@ struct GardenView: View {
                 ForEach(pads) { pad in
                     renderPad(pad, in: geo.size)
                 }
-                
-                ForEach(rosePetals) { petal in
-                    Ellipse()
-                        .fill(petal.color.opacity(petal.opacity))
-                        .frame(width: petal.size * 1.5, height: petal.size)
-                        .rotationEffect(.degrees(petal.rotation))
-                        .blur(radius: 0.5)
-                        .position(petal.position)
+
+                // Nightingale — between pads and particle canvas
+                if showNightingale {
+                    NightingaleView(
+                        size: geo.size.width * 0.10,
+                        isPerched: nightingaleIsPerched
+                    )
+                    .scaleEffect(x: nightingaleFacingRight ? 1 : -1, y: 1)
+                    .position(
+                        x: nightingalePosition.x * geo.size.width,
+                        y: nightingalePosition.y * geo.size.height
+                    )
+                    .opacity(nightingaleAppearOpacity)
+                    .onTapGesture {
+                        handleNightingaleTap(in: geo.size)
+                    }
                 }
-                
+
+                GardenParticleCanvas(petalBurst: petalBurst, reduceMotion: reduceMotion)
+
                 ForEach(fireflies) { firefly in
                     Circle()
                         .fill(
@@ -158,16 +170,29 @@ struct GardenView: View {
                     Color.black.opacity(showPoem ? 0.4 : 0)
                         .ignoresSafeArea()
                         .onTapGesture {
-                            withAnimation(.easeOut(duration: 0.4)) {
-                                showPoem = false
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                                currentPoem = nil
+                            if reduceMotion {
+                                withAnimation(.default) {
+                                    showPoem = false
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    currentPoem = nil
+                                }
+                            } else {
+                                withAnimation(.easeOut(duration: 0.4)) {
+                                    showPoem = false
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                                    currentPoem = nil
+                                }
                             }
                         }
                         .allowsHitTesting(showPoem)
+                        .accessibilityLabel("Dismiss poem")
+                        .accessibilityHint("Double tap to close")
+                        .accessibilityAddTraits(.isButton)
 
                     PoemOverlayView(
+                        poet: poem.poet,
                         persian: poem.persian,
                         english: poem.english,
                         culturalNote: poem.culturalNote,
@@ -175,39 +200,81 @@ struct GardenView: View {
                     )
                     .opacity(showPoem ? 1 : 0)
                     .scaleEffect(showPoem ? 1 : 0.95)
+                    .allowsHitTesting(false)
                 }
-                
-                ForEach(dustParticles) { particle in
-                    Circle()
-                        .fill(Color.white.opacity(particle.opacity))
-                        .frame(width: particle.size, height: particle.size)
-                        .blur(radius: particle.size * 0.15)
-                        .shadow(color: .white.opacity(particle.opacity * 0.5), radius: particle.size * 0.5)
-                        .position(particle.position)
+
+                // Nightingale bonus couplet overlay
+                if let couplet = currentNightingaleCouplet {
+                    Color.black.opacity(showNightingaleCouplet ? 0.4 : 0)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            if reduceMotion {
+                                withAnimation(.default) {
+                                    showNightingaleCouplet = false
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    currentNightingaleCouplet = nil
+                                    nightingaleFlyBackIn()
+                                }
+                            } else {
+                                withAnimation(.easeOut(duration: 0.4)) {
+                                    showNightingaleCouplet = false
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                                    currentNightingaleCouplet = nil
+                                    nightingaleFlyBackIn()
+                                }
+                            }
+                        }
+                        .allowsHitTesting(showNightingaleCouplet)
+                        .accessibilityLabel("Dismiss couplet")
+                        .accessibilityHint("Double tap to close")
+                        .accessibilityAddTraits(.isButton)
+
+                    PoemOverlayView(
+                        poet: couplet.poet,
+                        persian: couplet.persian,
+                        english: couplet.english,
+                        culturalNote: couplet.culturalNote,
+                        reflection: couplet.reflection
+                    )
+                    .opacity(showNightingaleCouplet ? 1 : 0)
+                    .scaleEffect(showNightingaleCouplet ? 1 : 0.95)
+                    .allowsHitTesting(false)
                 }
+
             }
         }
         .ignoresSafeArea()
         .onAppear {
-            initializeDustParticles(screenSize: UIScreen.main.bounds.size)
-            for _ in 0..<3 {
-                spawnRosePetal(screenSize: UIScreen.main.bounds.size, randomY: true)
-            }
             for _ in 0..<6 {
                 spawnFirefly(screenSize: UIScreen.main.bounds.size, randomY: true)
             }
+            checkNightingaleAppearance()
         }
-        .onReceive(timer) { _ in
-            time += 0.08
-            breathingIntensity = sin(time * 0.3) * 0.5 + 0.5
-            updatePads()
-            updateDustParticles(screenSize: UIScreen.main.bounds.size)
-            updateFireflies(screenSize: UIScreen.main.bounds.size)
-            updateWaterRipples()
-            updateRosePetals(screenSize: UIScreen.main.bounds.size)
+        .onReceive(timer) { now in
+            let dt: TimeInterval
+            if let last = lastUpdateTime {
+                dt = min(now.timeIntervalSince(last), 0.1)
+            } else {
+                dt = 1.0 / 60.0
+            }
+            lastUpdateTime = now
+            time += dt
+            updatePads(dt: dt)
+
+            if reduceMotion {
+                breathingIntensity = 0.5
+            } else {
+                breathingIntensity = sin(time * 0.3) * 0.5 + 0.5
+                updateFireflies(dt: dt, screenSize: UIScreen.main.bounds.size)
+                updateWaterRipples()
+            }
+
+            checkNightingaleAppearance()
         }
     }
-    
+
     private func renderPad(_ pad: Pad, in size: CGSize) -> some View {
         let padSize = size.width * 0.12
         let half = padSize / 2
@@ -232,7 +299,7 @@ struct GardenView: View {
                     )
                     .frame(width: padSize * 1.6, height: padSize * 1.6)
             }
-            
+
             Image(pad.isLotus ? "LotusFull" : "LilyPad")
                 .resizable()
                 .scaledToFit()
@@ -240,51 +307,50 @@ struct GardenView: View {
         }
         .position(x: x, y: y)
         .transition(.scale.combined(with: .opacity))
-        .animation(.easeInOut(duration: 2.5), value: pad.anchor)
         .animation(.easeInOut(duration: 0.5), value: pad.isLotus)
     }
-    
+
     private func handleTap(at location: CGPoint, in size: CGSize) {
         addNewPad()
         createWaterRipple(at: location)
-        
-        for _ in 0..<2 {
-            spawnRosePetal(screenSize: size)
-        }
-        
+        petalBurst += 1
+
         bobNearbyPads(tapLocation: CGPoint(
             x: location.x / size.width,
             y: location.y / size.height
         ))
     }
-    
-    private func updatePads() {
+
+    private func updatePads(dt: TimeInterval) {
+        let s = CGFloat(dt / 0.08) // scale factor: 1.0 at the old 12.5fps rate
+
         for index in pads.indices {
+            // Spring-damper bob (scaled for frame rate)
             if abs(pads[index].bobOffset) > 0.01 || abs(pads[index].bobVelocity) > 0.01 {
-                pads[index].bobVelocity += -pads[index].bobOffset * 0.3
-                pads[index].bobVelocity *= 0.85
-                pads[index].bobOffset += pads[index].bobVelocity
+                pads[index].bobVelocity += -pads[index].bobOffset * 0.3 * s
+                pads[index].bobVelocity *= pow(0.85, s)
+                pads[index].bobOffset += pads[index].bobVelocity * s
             } else {
                 pads[index].bobOffset = 0
                 pads[index].bobVelocity = 0
             }
-            
+
             if pads[index].glowIntensity > 0 {
-                pads[index].glowIntensity = max(0, pads[index].glowIntensity - 0.015)
+                pads[index].glowIntensity = max(0, pads[index].glowIntensity - 0.015 * s)
             }
-            
+
             let movement = calculateMovement(for: pads[index], time: time)
             var newPosition = CGPoint(
-                x: pads[index].anchor.x + movement.x,
-                y: pads[index].anchor.y + movement.y
+                x: pads[index].anchor.x + movement.x * s,
+                y: pads[index].anchor.y + movement.y * s
             )
-            
+
             if pads.count > 1 {
                 let minDistance: CGFloat = 0.16
                 for otherIndex in pads.indices where otherIndex != index {
                     let dist = distance(newPosition, pads[otherIndex].anchor)
                     if dist < minDistance && dist > 0.001 {
-                        let pushStrength = (minDistance - dist) * 0.03
+                        let pushStrength = (minDistance - dist) * 0.03 * s
                         let dx = (newPosition.x - pads[otherIndex].anchor.x) / dist
                         let dy = (newPosition.y - pads[otherIndex].anchor.y) / dist
                         newPosition.x += dx * pushStrength
@@ -292,12 +358,11 @@ struct GardenView: View {
                     }
                 }
             }
-            
-            // ✅ Keep pads in pool
+
             if isPointInPool(newPosition) {
                 pads[index].anchor = newPosition
             }
-            
+
             let distToTarget = distance(pads[index].anchor, pads[index].targetAnchor)
             if distToTarget < 0.04 || Int(time * 12) % 120 == index * 24 {
                 pads[index].targetAnchor = randomPointInPool()
@@ -308,16 +373,21 @@ struct GardenView: View {
             }
         }
     }
-    
+
     private func addNewPad() {
         let hasFullPool = pads.count == 5 && pads.allSatisfy { $0.isLotus }
-        
+
         if hasFullPool {
-            withAnimation(.easeOut(duration: 0.3)) {
+            if reduceMotion {
                 pads.removeFirst()
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 createLilyPad()
+            } else {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    pads.removeFirst()
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    createLilyPad()
+                }
             }
         } else if pads.isEmpty || pads.last?.isLotus == true {
             if pads.count < 5 {
@@ -327,10 +397,10 @@ struct GardenView: View {
             transformToLotus()
         }
     }
-    
+
     private func createLilyPad() {
         guard let poem = revealedPoemsStore.getNextPoem() else { return }
-        
+
         let position = randomPointInPool()
         let newPad = Pad(
             anchor: position,
@@ -341,32 +411,40 @@ struct GardenView: View {
             speed: CGFloat.random(in: 0.7...1.2),
             storedPoem: poem
         )
-        
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+
+        if reduceMotion {
             pads.append(newPad)
+        } else {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                pads.append(newPad)
+            }
         }
     }
-    
+
     private func transformToLotus() {
         guard let lastIndex = pads.indices.last else { return }
-        
+
         pads[lastIndex].isLotus = true
         pads[lastIndex].glowIntensity = 1.0
-        
+
         if let poem = pads[lastIndex].storedPoem {
             currentPoem = poem
             revealedPoemsStore.revealPoem(poem)
-            
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) {
-                showPoem = true
+
+            if reduceMotion {
+                withAnimation(.default) {
+                    showPoem = true
+                }
+            } else {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) {
+                    showPoem = true
+                }
             }
-            
-            for _ in 0..<4 {
-                spawnRosePetal(screenSize: UIScreen.main.bounds.size)
-            }
+
+            petalBurst += 2
         }
     }
-    
+
     private func bobNearbyPads(tapLocation: CGPoint) {
         for index in pads.indices {
             let dist = distance(pads[index].anchor, tapLocation)
@@ -376,32 +454,127 @@ struct GardenView: View {
             }
         }
     }
-    
+
+    // MARK: - Nightingale
+
+    private func checkNightingaleAppearance() {
+        guard !showNightingale, revealedPoemsStore.revealedCount >= 3 else { return }
+        showNightingale = true
+        nightingalePosition = nightingalePerchPositions[nightingalePerchIndex]
+        if reduceMotion {
+            nightingaleAppearOpacity = 1
+        } else {
+            withAnimation(.easeIn(duration: 1.5)) {
+                nightingaleAppearOpacity = 1
+            }
+        }
+    }
+
+    private func handleNightingaleTap(in size: CGSize) {
+        guard nightingaleIsPerched,
+              !showPoem,
+              !showNightingaleCouplet else { return }
+
+        nightingaleIsPerched = false
+
+        // Fly off-screen to the opposite side
+        let flyOutRight = nightingalePosition.x < 0.5
+        let flyOutX: CGFloat = flyOutRight ? 1.15 : -0.15
+        let flyOutY: CGFloat = nightingalePosition.y - 0.12
+        nightingaleFacingRight = flyOutRight
+
+        if reduceMotion {
+            nightingaleAppearOpacity = 0
+            showBonusCouplet()
+        } else {
+            petalBurst += 1  // takeoff burst
+
+            withAnimation(.easeIn(duration: 0.5)) {
+                nightingalePosition = CGPoint(x: flyOutX, y: flyOutY)
+                nightingaleAppearOpacity = 0
+            }
+
+            // Show couplet after the bird exits
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                showBonusCouplet()
+            }
+        }
+    }
+
+    private func nightingaleFlyBackIn() {
+        // Advance to next perch
+        nightingalePerchIndex = (nightingalePerchIndex + 1) % nightingalePerchPositions.count
+        let destination = nightingalePerchPositions[nightingalePerchIndex]
+
+        // Enter from the opposite side of the destination
+        let enterFromRight = destination.x < 0.5
+        let enterX: CGFloat = enterFromRight ? 1.15 : -0.15
+        let enterY: CGFloat = destination.y - 0.12
+        // Face toward the destination (opposite of entry side)
+        nightingaleFacingRight = !enterFromRight
+
+        if reduceMotion {
+            nightingalePosition = destination
+            nightingaleIsPerched = true
+            nightingaleAppearOpacity = 1
+        } else {
+            // Snap to off-screen entry point (no animation)
+            nightingalePosition = CGPoint(x: enterX, y: enterY)
+
+            // Glide in to the new perch
+            withAnimation(.easeOut(duration: 0.6)) {
+                nightingalePosition = destination
+                nightingaleAppearOpacity = 1
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                nightingaleIsPerched = true
+                petalBurst += 1  // landing burst
+            }
+        }
+    }
+
+    private func showBonusCouplet() {
+        let couplet = NightingaleCouplets.couplets[nightingaleCoupletIndex % NightingaleCouplets.couplets.count]
+        nightingaleCoupletIndex += 1
+        currentNightingaleCouplet = couplet
+        revealedPoemsStore.revealNightingaleCouplet(couplet)
+
+        if reduceMotion {
+            withAnimation(.default) {
+                showNightingaleCouplet = true
+            }
+        } else {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) {
+                showNightingaleCouplet = true
+            }
+        }
+    }
+
     private func distance(_ p1: CGPoint, _ p2: CGPoint) -> CGFloat {
         let dx = p2.x - p1.x
         let dy = p2.y - p1.y
         return sqrt(dx * dx + dy * dy)
     }
-    
-    // ✅ POOL BOUNDARIES - Lily pads only spawn here
+
     private func randomPointInPool() -> CGPoint {
         var point: CGPoint
         var attempts = 0
-        
+
         repeat {
             let x = CGFloat.random(in: 0.52...0.75)
             let y = CGFloat.random(in: 0.77...0.85)
             point = CGPoint(x: x, y: y)
             attempts += 1
         } while !isPointInPoolPolygon(point, margin: 0.10) && attempts < 50
-        
+
         return attempts < 50 ? point : CGPoint(x: 0.63, y: 0.81)
     }
-    
+
     private func isPointInPool(_ point: CGPoint) -> Bool {
         return isPointInPoolPolygon(point, margin: 0.10)
     }
-    
+
     private func isPointInPoolPolygon(_ point: CGPoint, margin: CGFloat) -> Bool {
         let poolVertices: [CGPoint] = [
             CGPoint(x: 0.53, y: 0.65),
@@ -410,26 +583,26 @@ struct GardenView: View {
             CGPoint(x: 0.67, y: 0.92),
             CGPoint(x: 0.21, y: 0.8)
         ]
-        
+
         let shrunkenVertices = shrinkPolygon(poolVertices, by: margin)
-        
+
         var inside = false
         var j = shrunkenVertices.count - 1
-        
+
         for i in 0..<shrunkenVertices.count {
             let vi = shrunkenVertices[i]
             let vj = shrunkenVertices[j]
-            
+
             if ((vi.y > point.y) != (vj.y > point.y)) &&
                (point.x < (vj.x - vi.x) * (point.y - vi.y) / (vj.y - vi.y) + vi.x) {
                 inside.toggle()
             }
             j = i
         }
-        
+
         return inside
     }
-    
+
     private func shrinkPolygon(_ vertices: [CGPoint], by margin: CGFloat) -> [CGPoint] {
         let centroid = vertices.reduce(CGPoint.zero) {
             CGPoint(x: $0.x + $1.x, y: $0.y + $1.y)
@@ -438,12 +611,12 @@ struct GardenView: View {
             x: centroid.x / CGFloat(vertices.count),
             y: centroid.y / CGFloat(vertices.count)
         )
-        
+
         return vertices.map { vertex in
             let dx = center.x - vertex.x
             let dy = center.y - vertex.y
             let distance = sqrt(dx * dx + dy * dy)
-            
+
             if distance > 0 {
                 let ratio = margin / distance
                 return CGPoint(
@@ -454,39 +627,7 @@ struct GardenView: View {
             return vertex
         }
     }
-    
-    private func initializeDustParticles(screenSize: CGSize) {
-        dustParticles.removeAll()
-        for _ in 0..<50 {
-            dustParticles.append(createDustParticle(screenSize: screenSize, randomY: true))
-        }
-    }
-    
-    private func createDustParticle(screenSize: CGSize, randomY: Bool = false) -> DustParticle {
-        return DustParticle(
-            position: CGPoint(
-                x: CGFloat.random(in: 0...screenSize.width),
-                y: randomY ? CGFloat.random(in: 0...screenSize.height) : CGFloat.random(in: -50...0)
-            ),
-            size: CGFloat.random(in: 3...7),
-            opacity: Double.random(in: 0.5...0.8),
-            speed: CGFloat.random(in: 0.2...0.6),
-            drift: CGFloat.random(in: -0.8...0.8)
-        )
-    }
-    
-    private func updateDustParticles(screenSize: CGSize) {
-        for index in dustParticles.indices {
-            dustParticles[index].position.y += dustParticles[index].speed
-            let sway = sin(time * 0.5 + CGFloat(index) * 0.3) * 0.8
-            dustParticles[index].position.x += dustParticles[index].drift + sway
-            
-            if dustParticles[index].position.y > screenSize.height + 50 {
-                dustParticles[index] = createDustParticle(screenSize: screenSize)
-            }
-        }
-    }
-    
+
     private func createWaterRipple(at position: CGPoint) {
         for i in 0..<2 {
             let ripple = WaterRipple(
@@ -498,77 +639,18 @@ struct GardenView: View {
             waterRipples.append(ripple)
         }
     }
-    
+
     private func updateWaterRipples() {
         let now = Date()
         waterRipples = waterRipples.filter { now.timeIntervalSince($0.createdAt) < 1.2 }
-        
+
         for index in waterRipples.indices {
             let age = now.timeIntervalSince(waterRipples[index].createdAt)
             waterRipples[index].radius = 15 + CGFloat(age) * 40
             waterRipples[index].opacity = max(0, waterRipples[index].opacity - age * 0.35)
         }
     }
-    
-    private func spawnRosePetal(screenSize: CGSize, randomY: Bool = false) {
-        let colors: [Color] = [
-            Color(red: 0.9, green: 0.3, blue: 0.4),
-            Color(red: 1.0, green: 0.4, blue: 0.5),
-            Color(red: 0.8, green: 0.2, blue: 0.3)
-        ]
-        
-        let petal = RosePetal(
-            position: CGPoint(
-                x: CGFloat.random(in: 0...screenSize.width),
-                y: randomY ? CGFloat.random(in: 0...screenSize.height) : CGFloat.random(in: -50...0)
-            ),
-            rotation: CGFloat.random(in: 0...360),
-            rotationSpeed: CGFloat.random(in: 0.5...2),
-            size: CGFloat.random(in: 8...15),
-            opacity: Double.random(in: 0.6...0.9),
-            speed: CGFloat.random(in: 0.3...0.7),
-            drift: CGFloat.random(in: -0.5...0.5),
-            color: colors.randomElement()!
-        )
-        rosePetals.append(petal)
-        
-        if rosePetals.count > 8 {
-            rosePetals.removeFirst()
-        }
-    }
-    
-    private func updateRosePetals(screenSize: CGSize) {
-        for index in rosePetals.indices {
-            rosePetals[index].position.y += rosePetals[index].speed
-            let sway = sin(time * 0.4 + CGFloat(index) * 0.5) * 1.2
-            rosePetals[index].position.x += rosePetals[index].drift + sway
-            rosePetals[index].rotation += rosePetals[index].rotationSpeed
-            
-            if rosePetals[index].position.y > screenSize.height + 50 {
-                rosePetals[index] = createRosePetal(screenSize: screenSize)
-            }
-        }
-    }
-    
-    private func createRosePetal(screenSize: CGSize) -> RosePetal {
-        let colors: [Color] = [
-            Color(red: 0.9, green: 0.3, blue: 0.4),
-            Color(red: 1.0, green: 0.4, blue: 0.5),
-            Color(red: 0.8, green: 0.2, blue: 0.3)
-        ]
-        
-        return RosePetal(
-            position: CGPoint(x: CGFloat.random(in: 0...screenSize.width), y: -20),
-            rotation: CGFloat.random(in: 0...360),
-            rotationSpeed: CGFloat.random(in: 0.5...2),
-            size: CGFloat.random(in: 8...15),
-            opacity: Double.random(in: 0.6...0.9),
-            speed: CGFloat.random(in: 0.3...0.7),
-            drift: CGFloat.random(in: -0.5...0.5),
-            color: colors.randomElement()!
-        )
-    }
-    
+
     private func spawnFirefly(screenSize: CGSize, randomY: Bool = false) {
         let baseOp = Double.random(in: 0.4...0.7)
         let firefly = Firefly(
@@ -584,21 +666,23 @@ struct GardenView: View {
             drift: CGFloat.random(in: -0.4...0.4)
         )
         fireflies.append(firefly)
-        
+
         if fireflies.count > 8 {
             fireflies.removeFirst()
         }
     }
-    
-    private func updateFireflies(screenSize: CGSize) {
+
+    private func updateFireflies(dt: TimeInterval, screenSize: CGSize) {
+        let s = CGFloat(dt / 0.08)
+
         for index in fireflies.indices {
-            fireflies[index].position.y -= fireflies[index].speed
+            fireflies[index].position.y -= fireflies[index].speed * s
             let sway = sin(time * 0.3 + CGFloat(index) * 0.4) * 0.6
-            fireflies[index].position.x += fireflies[index].drift + sway
-            
+            fireflies[index].position.x += (fireflies[index].drift + sway) * s
+
             let twinkle = sin(time * 2 + fireflies[index].twinklePhase) * 0.5 + 0.5
             fireflies[index].opacity = fireflies[index].baseOpacity * (0.5 + twinkle * 0.5)
-            
+
             if fireflies[index].position.y < -50 {
                 let baseOp = Double.random(in: 0.4...0.7)
                 fireflies[index] = Firefly(
@@ -613,24 +697,24 @@ struct GardenView: View {
             }
         }
     }
-    
+
     private func calculateMovement(for pad: Pad, time: TimeInterval) -> CGPoint {
         let baseSpeed: CGFloat = 0.0006 * pad.speed
-        
+
         switch pad.movementStyle {
         case .gentle:
             let driftAngle = sin(time * 0.1 + pad.phase) * .pi
             let dx = cos(driftAngle) * baseSpeed * 2.5 + (pad.targetAnchor.x - pad.anchor.x) * baseSpeed * 1.5
             let dy = sin(driftAngle) * baseSpeed * 2.5 + (pad.targetAnchor.y - pad.anchor.y) * baseSpeed * 1.5
             return CGPoint(x: dx, y: dy)
-            
+
         case .wavy:
             let waveX = sin(time * pad.speed * 0.4 + pad.phase) * baseSpeed * 2.5
             let waveY = cos(time * pad.speed * 0.3 + pad.phase) * baseSpeed * 2.5
             let driftX = sin(time * 0.08 + pad.phase * 2) * baseSpeed * 1.5
             let driftY = cos(time * 0.06 + pad.phase * 3) * baseSpeed * 1.5
             return CGPoint(x: waveX + driftX, y: waveY + driftY)
-            
+
         case .circular:
             let angle = time * pad.speed * 0.3 + pad.phase
             let wanderX = sin(time * 0.05 + pad.phase) * baseSpeed * 1
@@ -639,7 +723,7 @@ struct GardenView: View {
                 x: cos(angle) * baseSpeed * 2.5 + wanderX,
                 y: sin(angle) * baseSpeed * 2.5 + wanderY
             )
-            
+
         case .zigzag:
             let t = time * pad.speed * 0.3 + pad.phase
             let zigX = sin(t) * baseSpeed * 3
@@ -647,7 +731,7 @@ struct GardenView: View {
             let driftX = cos(time * 0.07 + pad.phase) * baseSpeed * 1
             let driftY = sin(time * 0.05 + pad.phase * 1.5) * baseSpeed * 1
             return CGPoint(x: zigX + driftX, y: zigY + driftY)
-            
+
         case .stillness:
             let dx = sin(time * 0.2 + pad.phase) * baseSpeed * 1.5
             let dy = cos(time * 0.15 + pad.phase) * baseSpeed * 1.5
@@ -656,7 +740,6 @@ struct GardenView: View {
     }
 }
 
-// ✅ POOL SHAPE - Defines the tap area
 struct PoolWaterHitShape: Shape {
     func path(in rect: CGRect) -> Path {
         func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
@@ -680,6 +763,6 @@ struct PoolWaterHitShape: Shape {
 }
 
 #Preview {
-    GardenView()
+    GardenView(showMainApp: .constant(true))
         .environmentObject(RevealedPoemsStore())
 }

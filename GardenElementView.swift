@@ -1,29 +1,27 @@
 //
-//  GardenElementView.swift
+//  GardenElementView.swift → NightingaleView
 //  WhispersoftheGardenApp
 //
-//  Created by Nima Khodarahmi on 27/12/25.
+//  Interactive nightingale that perches in the garden.
+//  Shows Nightingale02 (sitting) when perched,
+//  Nightingale01 (wings spread) when flying.
 //
 
-import Foundation
 import SwiftUI
 
-struct GardenElementView: View {
-    
-    let imageName: String
-    let isVisible: Bool
+struct NightingaleView: View {
+
     let size: CGFloat
-    let step: Int
-    
-    
+    let isPerched: Bool
+
     var body: some View {
-        
-        BundlePNGImage(fileName: "\(imageName).png", size: size)
+        Image(isPerched ? "Nightingale02" : "Nightingale01")
+            .resizable()
             .scaledToFit()
-            .frame(width: size)
-            .opacity(isVisible ? 1 : 0)
-            .scaleEffect (isVisible ? 1 : 0.6)
-            .blur (radius: isVisible ? 0 : 8)
-            .animation(.easeInOut(duration: 2.2), value: isVisible)
+            .frame(width: size, height: size)
+            .contentShape(Circle().scale(1.8))
+            .accessibilityLabel("Nightingale")
+            .accessibilityHint("Double tap to see the nightingale fly and reveal a Hafez couplet")
+            .accessibilityAddTraits(.isButton)
     }
 }

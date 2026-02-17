@@ -8,6 +8,7 @@ import Foundation
 
 struct Poem: Identifiable {
     let id: UUID
+    let poet: String
     let persian: String
     let english: String
     let culturalNote: String

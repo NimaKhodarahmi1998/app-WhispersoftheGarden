@@ -2,106 +2,130 @@
 //  PoemDetailView.swift
 //  WhispersoftheGardenApp
 //
-//  Displays a single poem with its Persian text, English translation,
-//  cultural note, and personal reflection.
-//
 
 import SwiftUI
 
 struct PoemDetailView: View {
-    
     let poem: Poem
-    @Environment(\.dismiss) private var dismiss
-    
+
+    private let bgColor = Color(red: 0.02, green: 0.08, blue: 0.18)
+    private let rose = Color(red: 0.9, green: 0.4, blue: 0.5)
+    private let gold = Color(red: 1.0, green: 0.85, blue: 0.55)
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                
-                // Persian Text
-                VStack(alignment: .center, spacing: 8) {
-                    Text(poem.persian)
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.primary)
-                        .padding(.top, 8)
-                }
-                .frame(maxWidth: .infinity)
-                
-                Divider()
-                
-                // English Translation
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Translation")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
+        ZStack {
+            bgColor.ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+
+                    // Poet
+                    Text(poem.poet)
+                        .font(.system(size: 14, weight: .semibold, design: .serif))
+                        .foregroundStyle(rose.opacity(0.7))
                         .textCase(.uppercase)
-                        .tracking(1)
-                    
-                    Text(poem.english)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .italic()
+                        .tracking(2)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
+                        .accessibilityLabel("Poet: \(poem.poet)")
+
+                    // Original Persian
+                    VStack(spacing: 8) {
+                        Text("Original")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white.opacity(0.35))
+                            .textCase(.uppercase)
+                            .tracking(1.5)
+
+                        Text(poem.persian)
+                            .font(.system(size: 22, weight: .medium, design: .serif))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(gold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Original Persian: \(poem.persian)")
+
+                    // Divider
+                    Rectangle()
+                        .fill(rose.opacity(0.2))
+                        .frame(height: 0.5)
+                        .padding(.horizontal, 40)
+
+                    // English Translation
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Translation")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white.opacity(0.35))
+                            .textCase(.uppercase)
+                            .tracking(1.5)
+
+                        Text(poem.english)
+                            .font(.system(size: 16, design: .serif))
+                            .italic()
+                            .foregroundStyle(.white.opacity(0.85))
+                            .lineSpacing(4)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Translation: \(poem.english)")
+
+                    // Cultural Note
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Cultural Context", systemImage: "book.closed")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(gold.opacity(0.7))
+                            .textCase(.uppercase)
+                            .tracking(1.5)
+
+                        Text(poem.culturalNote)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .lineSpacing(3)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.white.opacity(0.05))
+                    )
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Cultural Context: \(poem.culturalNote)")
+
+                    // Reflection
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Reflection", systemImage: "heart")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(rose.opacity(0.8))
+                            .textCase(.uppercase)
+                            .tracking(1.5)
+
+                        Text(poem.reflection)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .lineSpacing(3)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(rose.opacity(0.08))
+                    )
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Reflection: \(poem.reflection)")
+
+                    Spacer(minLength: 40)
                 }
-                
-                // Cultural Note
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Cultural Context", systemImage: "book.closed")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                        .tracking(1)
-                    
-                    Text(poem.culturalNote)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(Color.secondary.opacity(0.1))
-                .cornerRadius(8)
-                
-                // Personal Reflection
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Reflection", systemImage: "heart")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.blue)
-                        .textCase(.uppercase)
-                        .tracking(1)
-                    
-                    Text(poem.reflection)
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(8)
-                
-                Spacer(minLength: 32)
+                .padding(.horizontal)
             }
-            .padding()
         }
         .navigationTitle("Poem")
         .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-// MARK: - Preview
-
-#Preview {
-    NavigationStack {
-        PoemDetailView(
-            poem: Poem(
-                id: UUID(),
-                persian: "بنی آدم اعضای یکدیگرند",
-                english: "Human beings are members of a whole.",
-                culturalNote: "Saʿdi emphasizes shared humanity as the foundation of ethics.",
-                reflection: "Gentleness toward yourself is a form of care for others."
-            )
-        )
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(bgColor, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
     }
 }

@@ -12,11 +12,14 @@ import SwiftUI
 class RevealedPoemsStore: ObservableObject {
     
     @Published private(set) var revealedPoemIDs: Set<UUID> = []
-    
+    @Published private(set) var revealedNightingaleIDs: Set<UUID> = []
+
     private let userDefaultsKey = "revealedPoemIDs"
-    
+    private let nightingaleKey = "revealedNightingaleIDs"
+
     init() {
         loadRevealedPoems()
+        loadNightingaleCouplets()
     }
     
     func revealPoem(_ poem: Poem) {
@@ -60,6 +63,40 @@ class RevealedPoemsStore: ObservableObject {
         }
     }
     
+    // MARK: - Nightingale Couplets
+
+    func revealNightingaleCouplet(_ poem: Poem) {
+        guard !revealedNightingaleIDs.contains(poem.id) else { return }
+        revealedNightingaleIDs.insert(poem.id)
+        saveNightingaleCouplets()
+    }
+
+    func getRevealedNightingaleCouplets() -> [Poem] {
+        NightingaleCouplets.couplets.filter { revealedNightingaleIDs.contains($0.id) }
+    }
+
+    var revealedNightingaleCount: Int {
+        revealedNightingaleIDs.count
+    }
+
+    private func loadNightingaleCouplets() {
+        guard let data = UserDefaults.standard.data(forKey: nightingaleKey),
+              let stringIDs = try? JSONDecoder().decode([String].self, from: data) else {
+            revealedNightingaleIDs = []
+            return
+        }
+        revealedNightingaleIDs = Set(stringIDs.compactMap { UUID(uuidString: $0) })
+    }
+
+    private func saveNightingaleCouplets() {
+        let stringIDs = revealedNightingaleIDs.map { $0.uuidString }
+        if let data = try? JSONEncoder().encode(stringIDs) {
+            UserDefaults.standard.set(data, forKey: nightingaleKey)
+        }
+    }
+
+    // MARK: - Persistence
+
     private func loadRevealedPoems() {
         guard let data = UserDefaults.standard.data(forKey: userDefaultsKey),
               let stringIDs = try? JSONDecoder().decode([String].self, from: data) else {
@@ -80,7 +117,9 @@ class RevealedPoemsStore: ObservableObject {
     #if DEBUG
     func resetAllPoems() {
         revealedPoemIDs.removeAll()
+        revealedNightingaleIDs.removeAll()
         UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+        UserDefaults.standard.removeObject(forKey: nightingaleKey)
     }
     #endif
 }
