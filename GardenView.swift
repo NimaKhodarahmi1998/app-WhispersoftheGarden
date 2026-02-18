@@ -198,14 +198,28 @@ struct GardenView: View {
                         .position(firefly.position)
                 }
 
-                // Garden hints
+                // Garden hints — tutorial
                 if let stage = hintStore.activeHint, hintVisible,
                    !(stage == .tapNightingale && !showNightingale) {
                     GardenHintView(
                         stage: stage,
                         targetPosition: hintPosition(for: stage, in: geo.size),
                         screenSize: geo.size,
-                        reduceMotion: reduceMotion
+                        reduceMotion: reduceMotion,
+                        mode: .tutorial
+                    )
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                }
+
+                // Garden hints — persistent invitation glow (post-tutorial)
+                if let invitation = invitationStage(in: geo.size), hintVisible {
+                    GardenHintView(
+                        stage: invitation.stage,
+                        targetPosition: invitation.position,
+                        screenSize: geo.size,
+                        reduceMotion: reduceMotion,
+                        mode: .invitation
                     )
                     .allowsHitTesting(false)
                     .transition(.opacity)
@@ -1002,6 +1016,19 @@ struct GardenView: View {
             return CGPoint(x: nightingalePosition.x * size.width,
                            y: nightingalePosition.y * size.height)
         }
+    }
+
+    private func invitationStage(in size: CGSize) -> (stage: GardenHintStage, position: CGPoint)? {
+        guard hintStore.isTutorialComplete else { return nil }
+        guard !showPoem, !showNightingaleCouplet else { return nil }
+
+        if showNightingale && nightingaleIsPerched {
+            return (.tapNightingale, hintPosition(for: .tapNightingale, in: size))
+        }
+        if pads.contains(where: { !$0.isLotus }) {
+            return (.tapLilyPad, hintPosition(for: .tapLilyPad, in: size))
+        }
+        return (.tapPool, hintPosition(for: .tapPool, in: size))
     }
 
     private func distance(_ p1: CGPoint, _ p2: CGPoint) -> CGFloat {

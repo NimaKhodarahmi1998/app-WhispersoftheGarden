@@ -9,7 +9,7 @@
 import Foundation
 import SwiftUI
 
-enum GardenHintStage {
+enum GardenHintStage: Equatable {
     case tapPool, tapLilyPad, tapNightingale
 }
 
@@ -31,6 +31,8 @@ class GardenHintStore: ObservableObject {
         hasEverTappedPad         = UserDefaults.standard.bool(forKey: Keys.pad)
         hasEverTappedNightingale = UserDefaults.standard.bool(forKey: Keys.nightingale)
     }
+
+    var isTutorialComplete: Bool { activeHint == nil }
 
     var activeHint: GardenHintStage? {
         if !hasEverTappedPool        { return .tapPool }

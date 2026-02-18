@@ -10,11 +10,17 @@
 
 import SwiftUI
 
+enum GardenHintMode {
+    case tutorial   // spotlight + glow + motes + ripples + text
+    case invitation // spotlight + glow + ripples only, subtler opacity
+}
+
 struct GardenHintView: View {
     let stage: GardenHintStage
     let targetPosition: CGPoint
     let screenSize: CGSize
     let reduceMotion: Bool
+    let mode: GardenHintMode
 
     @State private var ring0: CGFloat = 0
     @State private var ring1: CGFloat = 0
@@ -39,6 +45,10 @@ struct GardenHintView: View {
         }
     }
 
+    private var opacityScale: Double {
+        mode == .tutorial ? 1.0 : 0.6
+    }
+
     private let baseRadius: CGFloat = 28
 
     var body: some View {
@@ -60,10 +70,11 @@ struct GardenHintView: View {
         let c = color
         let r = baseRadius
         let pos = targetPosition
+        let os = opacityScale
         return ZStack {
             // Static spotlight vignette
             RadialGradient(
-                colors: [.clear, Color.black.opacity(0.30)],
+                colors: [.clear, Color.black.opacity(0.30 * os)],
                 center: UnitPoint(
                     x: pos.x / screenSize.width,
                     y: pos.y / screenSize.height
@@ -77,7 +88,7 @@ struct GardenHintView: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [c.opacity(0.35), .clear],
+                        colors: [c.opacity(0.35 * os), .clear],
                         center: .center,
                         startRadius: 0,
                         endRadius: 100
@@ -88,13 +99,15 @@ struct GardenHintView: View {
 
             // Static ripple ring
             Circle()
-                .stroke(c.opacity(0.5), lineWidth: 3)
+                .stroke(c.opacity(0.5 * os), lineWidth: 3)
                 .blur(radius: 4)
                 .frame(width: r * 2, height: r * 2)
                 .position(pos)
 
-            HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
-                      opacity: 0.85, yOffset: 0)
+            if mode == .tutorial {
+                HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
+                          opacity: 0.85, yOffset: 0)
+            }
         }
     }
 
@@ -104,9 +117,10 @@ struct GardenHintView: View {
         let c = color
         let r = baseRadius
         let pos = targetPosition
+        let os = opacityScale
         // breathe interpolates 0→1 for pulsing effects
-        let spotlightOpacity = 0.25 + breathe * 0.15
-        let glowOpacity = 0.25 + breathe * 0.20
+        let spotlightOpacity = (0.25 + breathe * 0.15) * os
+        let glowOpacity = (0.25 + breathe * 0.20) * os
 
         return ZStack {
             // 1. Spotlight vignette
@@ -137,15 +151,21 @@ struct GardenHintView: View {
 
             // 3. Rising motes
             HintMotesCanvas(color: c, targetPosition: pos)
+                .opacity(os)
 
             // 4. Glow ripple rings
             HintRippleRing(color: c, baseRadius: r, position: pos, progress: ring0)
+                .opacity(os)
             HintRippleRing(color: c, baseRadius: r, position: pos, progress: ring1)
+                .opacity(os)
             HintRippleRing(color: c, baseRadius: r, position: pos, progress: ring2)
+                .opacity(os)
 
-            // 5. Text label with pill
-            HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
-                      opacity: textOpacity, yOffset: textOffset)
+            // 5. Text label with pill (tutorial only)
+            if mode == .tutorial {
+                HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
+                          opacity: textOpacity, yOffset: textOffset)
+            }
         }
         .onAppear { startAnimations() }
     }

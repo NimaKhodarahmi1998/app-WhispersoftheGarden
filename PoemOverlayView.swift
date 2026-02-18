@@ -57,7 +57,7 @@ struct PoemOverlayView: View {
 
                                     Text("— \(poet)")
                                         .font(.system(
-                                            size: isIPad ? 20 : 14,
+                                            size: isIPad ? (isNightingale ? 18 : 20) : (isNightingale ? 12 : 14),
                                             weight: isNightingale ? .medium : .semibold,
                                             design: .serif
                                         ))
@@ -73,7 +73,7 @@ struct PoemOverlayView: View {
 
                                     Text(english)
                                         .font(.system(
-                                            size: isIPad ? 24 : 17,
+                                            size: isIPad ? (isNightingale ? 21 : 24) : (isNightingale ? 15 : 17),
                                             weight: .medium,
                                             design: .serif
                                         ))
@@ -90,7 +90,7 @@ struct PoemOverlayView: View {
 
                                     Text(persian)
                                         .font(.system(
-                                            size: isIPad ? 18 : 14,
+                                            size: isIPad ? (isNightingale ? 16 : 18) : (isNightingale ? 12 : 14),
                                             weight: .medium,
                                             design: .serif
                                         ))
@@ -112,14 +112,14 @@ struct PoemOverlayView: View {
                                     }
 
                                     Text(culturalNote)
-                                        .font(.system(size: isIPad ? 13 : 10, design: .serif))
+                                        .font(.system(size: isIPad ? (isNightingale ? 12 : 13) : (isNightingale ? 9 : 10), design: .serif))
                                         .multilineTextAlignment(.center)
                                         .foregroundStyle(accentColor.opacity(0.75))
 
                                     // Reflection — lighter and warmer for nightingale
                                     Text(reflection)
                                         .font(.system(
-                                            size: isIPad ? (isNightingale ? 15 : 14) : (isNightingale ? 12 : 11),
+                                            size: isIPad ? (isNightingale ? 13 : 14) : (isNightingale ? 11 : 11),
                                             weight: isNightingale ? .light : .medium,
                                             design: .serif
                                         ))
