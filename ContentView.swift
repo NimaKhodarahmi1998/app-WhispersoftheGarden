@@ -11,7 +11,8 @@ struct ContentView: View {
     @State private var showMainApp = false       // one-shot trigger from LandingPage
     @State private var showOptions = false
     @State private var isTransitioning = false
-    @State private var gardenReady = false       // garden view exists in the hierarchy
+    @State private var gardenCreated = false     // once true, stays true — keeps view alive
+    @State private var showGarden = false        // home button binding — triggers exit transition
     @State private var gardenOpacity: Double = 0 // cross-fade control
     @State private var landingVisible = true     // keep landing alive during cross-fade
 
@@ -27,11 +28,12 @@ struct ContentView: View {
                         .environmentObject(revealedPoemsStore)
                 }
 
-                // Garden fades in/out on top of landing page
-                if gardenReady {
-                    MainAppView(showMainApp: $gardenReady)
+                // Garden persists once created — only opacity changes
+                if gardenCreated {
+                    MainAppView(showMainApp: $showGarden)
                         .environmentObject(revealedPoemsStore)
                         .opacity(gardenOpacity)
+                        .allowsHitTesting(gardenOpacity > 0)
                 }
 
                 // Petal overlay on top of everything
@@ -47,10 +49,9 @@ struct ContentView: View {
                 beginEnterTransition()
             }
         }
-        .onChange(of: gardenReady) { newValue in
+        .onChange(of: showGarden) { newValue in
             // Back button pressed from garden/library — play exit transition
             if !newValue && !isTransitioning {
-                gardenReady = true // keep alive while we transition
                 beginHomeTransition()
             }
         }
@@ -67,7 +68,8 @@ struct ContentView: View {
             if reduceMotion {
                 // Instant cross-fade with brief overlay
                 try? await Task.sleep(for: .milliseconds(100))
-                gardenReady = true
+                gardenCreated = true
+                showGarden = true
                 gardenOpacity = 1.0
                 landingVisible = false
                 try? await Task.sleep(for: .milliseconds(400))
@@ -76,8 +78,9 @@ struct ContentView: View {
                 // Phase 1: Petals build up
                 try? await Task.sleep(for: .milliseconds(900))
 
-                // Phase 2: Create garden, cross-dissolve in
-                gardenReady = true
+                // Phase 2: Show garden, cross-dissolve in
+                gardenCreated = true
+                showGarden = true
                 gardenOpacity = 0
 
                 withAnimation(.easeInOut(duration: 1.0)) {
@@ -107,7 +110,6 @@ struct ContentView: View {
                 try? await Task.sleep(for: .milliseconds(100))
                 landingVisible = true
                 gardenOpacity = 0
-                gardenReady = false
                 try? await Task.sleep(for: .milliseconds(400))
                 isTransitioning = false
             } else {
@@ -121,9 +123,8 @@ struct ContentView: View {
                     gardenOpacity = 0
                 }
 
-                // Phase 3: Remove garden
+                // Phase 3: Garden stays alive but hidden (gardenCreated stays true)
                 try? await Task.sleep(for: .milliseconds(1100))
-                gardenReady = false
 
                 // Phase 4: Petals finish drifting
                 try? await Task.sleep(for: .milliseconds(1000))

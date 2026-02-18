@@ -25,17 +25,16 @@ struct MainAppView: View {
 
     var body: some View {
         ZStack {
-            // Content — cross-fade between tabs
-            Group {
-                if selectedTab == 0 {
-                    GardenView(showMainApp: $showMainApp)
-                        .transition(.opacity)
-                } else {
-                    NavigationStack {
-                        LibraryView(showMainApp: $showMainApp)
-                    }
-                    .transition(.opacity)
+            // Content — garden stays alive, library overlays on top
+            GardenView(showMainApp: $showMainApp)
+                .opacity(selectedTab == 0 ? 1 : 0)
+                .allowsHitTesting(selectedTab == 0)
+
+            if selectedTab == 1 {
+                NavigationStack {
+                    LibraryView(showMainApp: $showMainApp)
                 }
+                .transition(.opacity)
             }
 
             // Petal transition overlay with wind direction

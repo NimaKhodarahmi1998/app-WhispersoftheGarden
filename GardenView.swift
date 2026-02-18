@@ -69,6 +69,10 @@ struct GardenView: View {
     @State private var currentNightingaleCouplet: Poem?
     @State private var nightingaleAppearOpacity: Double = 0
 
+    // Hint system
+    @StateObject private var hintStore = GardenHintStore()
+    @State private var hintVisible = false
+
     // Perch positions on land (cobblestone & garden bed, alternating left/right)
     private let nightingalePerchPositions: [CGPoint] = [
         CGPoint(x: 0.12, y: 0.82),   // left cobblestone, near flower pot
@@ -166,6 +170,18 @@ struct GardenView: View {
                         .position(firefly.position)
                 }
 
+                // Garden hints
+                if let stage = hintStore.activeHint, hintVisible,
+                   !(stage == .tapNightingale && !showNightingale) {
+                    GardenHintView(
+                        stage: stage,
+                        targetPosition: hintPosition(for: stage, in: geo.size),
+                        reduceMotion: reduceMotion
+                    )
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                }
+
                 if let poem = currentPoem {
                     Color.black.opacity(showPoem ? 0.4 : 0)
                         .ignoresSafeArea()
@@ -236,7 +252,8 @@ struct GardenView: View {
                         persian: couplet.persian,
                         english: couplet.english,
                         culturalNote: couplet.culturalNote,
-                        reflection: couplet.reflection
+                        reflection: couplet.reflection,
+                        backgroundImage: "Katibe2"
                     )
                     .opacity(showNightingaleCouplet ? 1 : 0)
                     .scaleEffect(showNightingaleCouplet ? 1 : 0.95)
@@ -251,6 +268,13 @@ struct GardenView: View {
                 spawnFirefly(screenSize: UIScreen.main.bounds.size, randomY: true)
             }
             checkNightingaleAppearance()
+
+            // Show hints after a short delay so the scene establishes first
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation(.easeIn(duration: 0.6)) {
+                    hintVisible = true
+                }
+            }
         }
         .onReceive(timer) { now in
             let dt: TimeInterval
@@ -305,20 +329,30 @@ struct GardenView: View {
                 .scaledToFit()
                 .frame(width: padSize, height: padSize)
         }
+        .frame(width: padSize, height: padSize)
+        .contentShape(Circle())
+        .onTapGesture {
+            handlePadTap(pad)
+        }
+        .allowsHitTesting(!pad.isLotus)
         .position(x: x, y: y)
-        .transition(.scale.combined(with: .opacity))
+        .transition(
+            .asymmetric(
+                insertion: .scale(scale: 0, anchor: .bottom).combined(with: .opacity),
+                removal: .scale.combined(with: .opacity)
+            )
+        )
         .animation(.easeInOut(duration: 0.5), value: pad.isLotus)
     }
 
     private func handleTap(at location: CGPoint, in size: CGSize) {
-        addNewPad()
+        let normalized = CGPoint(x: location.x / size.width,
+                                 y: location.y / size.height)
+        addNewPad(at: normalized)
         createWaterRipple(at: location)
         petalBurst += 1
-
-        bobNearbyPads(tapLocation: CGPoint(
-            x: location.x / size.width,
-            y: location.y / size.height
-        ))
+        bobNearbyPads(tapLocation: normalized)
+        hintStore.markPoolTapped()
     }
 
     private func updatePads(dt: TimeInterval) {
@@ -374,34 +408,27 @@ struct GardenView: View {
         }
     }
 
-    private func addNewPad() {
-        let hasFullPool = pads.count == 5 && pads.allSatisfy { $0.isLotus }
-
-        if hasFullPool {
+    private func addNewPad(at position: CGPoint) {
+        if pads.count >= 5 {
             if reduceMotion {
                 pads.removeFirst()
-                createLilyPad()
+                createLilyPad(at: position)
             } else {
                 withAnimation(.easeOut(duration: 0.3)) {
                     pads.removeFirst()
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    createLilyPad()
+                    createLilyPad(at: position)
                 }
             }
-        } else if pads.isEmpty || pads.last?.isLotus == true {
-            if pads.count < 5 {
-                createLilyPad()
-            }
         } else {
-            transformToLotus()
+            createLilyPad(at: position)
         }
     }
 
-    private func createLilyPad() {
+    private func createLilyPad(at position: CGPoint) {
         guard let poem = revealedPoemsStore.getNextPoem() else { return }
 
-        let position = randomPointInPool()
         let newPad = Pad(
             anchor: position,
             isLotus: false,
@@ -415,19 +442,20 @@ struct GardenView: View {
         if reduceMotion {
             pads.append(newPad)
         } else {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.6)) {
                 pads.append(newPad)
             }
         }
     }
 
-    private func transformToLotus() {
-        guard let lastIndex = pads.indices.last else { return }
+    private func handlePadTap(_ pad: Pad) {
+        guard !pad.isLotus,
+              let index = pads.firstIndex(where: { $0.id == pad.id }) else { return }
 
-        pads[lastIndex].isLotus = true
-        pads[lastIndex].glowIntensity = 1.0
+        pads[index].isLotus = true
+        pads[index].glowIntensity = 1.0
 
-        if let poem = pads[lastIndex].storedPoem {
+        if let poem = pads[index].storedPoem {
             currentPoem = poem
             revealedPoemsStore.revealPoem(poem)
 
@@ -443,6 +471,8 @@ struct GardenView: View {
 
             petalBurst += 2
         }
+
+        hintStore.markPadTapped()
     }
 
     private func bobNearbyPads(tapLocation: CGPoint) {
@@ -475,12 +505,12 @@ struct GardenView: View {
               !showPoem,
               !showNightingaleCouplet else { return }
 
+        hintStore.markNightingaleTapped()
         nightingaleIsPerched = false
 
-        // Fly off-screen to the opposite side
-        let flyOutRight = nightingalePosition.x < 0.5
-        let flyOutX: CGFloat = flyOutRight ? 1.15 : -0.15
-        let flyOutY: CGFloat = nightingalePosition.y - 0.12
+        let startPos = nightingalePosition
+        let flyOutRight = startPos.x < 0.5
+        let exitX: CGFloat = flyOutRight ? 1.15 : -0.15
         nightingaleFacingRight = flyOutRight
 
         if reduceMotion {
@@ -489,13 +519,35 @@ struct GardenView: View {
         } else {
             petalBurst += 1  // takeoff burst
 
-            withAnimation(.easeIn(duration: 0.5)) {
-                nightingalePosition = CGPoint(x: flyOutX, y: flyOutY)
-                nightingaleAppearOpacity = 0
+            let dir: CGFloat = flyOutRight ? 1 : -1
+
+            // Phase 1: Lift off — rise upward with slight lateral drift
+            withAnimation(.easeOut(duration: 0.45)) {
+                nightingalePosition = CGPoint(
+                    x: startPos.x + dir * 0.10,
+                    y: startPos.y - 0.22
+                )
             }
 
-            // Show couplet after the bird exits
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            // Phase 2: Cruise — glide across at peak height
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    nightingalePosition = CGPoint(
+                        x: startPos.x + dir * 0.45,
+                        y: startPos.y - 0.28
+                    )
+                }
+            }
+
+            // Phase 3: Sweep out — descend slightly and exit, fade
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                withAnimation(.easeIn(duration: 0.5)) {
+                    nightingalePosition = CGPoint(x: exitX, y: startPos.y - 0.15)
+                    nightingaleAppearOpacity = 0
+                }
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.35) {
                 showBonusCouplet()
             }
         }
@@ -509,7 +561,7 @@ struct GardenView: View {
         // Enter from the opposite side of the destination
         let enterFromRight = destination.x < 0.5
         let enterX: CGFloat = enterFromRight ? 1.15 : -0.15
-        let enterY: CGFloat = destination.y - 0.12
+        let enterY: CGFloat = destination.y - 0.15
         // Face toward the destination (opposite of entry side)
         nightingaleFacingRight = !enterFromRight
 
@@ -521,13 +573,32 @@ struct GardenView: View {
             // Snap to off-screen entry point (no animation)
             nightingalePosition = CGPoint(x: enterX, y: enterY)
 
-            // Glide in to the new perch
-            withAnimation(.easeOut(duration: 0.6)) {
-                nightingalePosition = destination
+            let midX = (enterX + destination.x) / 2
+
+            // Phase 1: Glide in from off-screen, rising to arc peak
+            withAnimation(.easeOut(duration: 0.5)) {
+                nightingalePosition = CGPoint(x: midX, y: destination.y - 0.26)
                 nightingaleAppearOpacity = 1
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            // Phase 2: Descend toward the perch area
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                withAnimation(.easeInOut(duration: 0.45)) {
+                    nightingalePosition = CGPoint(
+                        x: destination.x + (enterFromRight ? 0.04 : -0.04),
+                        y: destination.y - 0.06
+                    )
+                }
+            }
+
+            // Phase 3: Settle onto perch with a gentle spring bob
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.65)) {
+                    nightingalePosition = destination
+                }
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
                 nightingaleIsPerched = true
                 petalBurst += 1  // landing burst
             }
@@ -548,6 +619,22 @@ struct GardenView: View {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) {
                 showNightingaleCouplet = true
             }
+        }
+    }
+
+    private func hintPosition(for stage: GardenHintStage, in size: CGSize) -> CGPoint {
+        switch stage {
+        case .tapPool:
+            return CGPoint(x: 0.70 * size.width, y: 0.82 * size.height)
+        case .tapLilyPad:
+            if let firstPad = pads.first(where: { !$0.isLotus }) {
+                return CGPoint(x: firstPad.anchor.x * size.width,
+                               y: firstPad.anchor.y * size.height)
+            }
+            return CGPoint(x: 0.70 * size.width, y: 0.82 * size.height)
+        case .tapNightingale:
+            return CGPoint(x: nightingalePosition.x * size.width,
+                           y: nightingalePosition.y * size.height)
         }
     }
 
