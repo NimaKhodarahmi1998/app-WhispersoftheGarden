@@ -57,86 +57,204 @@ struct LibraryView: View {
     @EnvironmentObject var revealedPoemsStore: RevealedPoemsStore
     @Binding var showMainApp: Bool
     @State private var searchText = ""
+    @State private var selectedPoet: String? = nil
+    @State private var showFavoritesOnly = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var revealedPoems: [Poem] {
-        revealedPoemsStore.getRevealedPoems()
-    }
+    // All poems (revealed + locked)
+    private var allPoems: [Poem] { PoemLibrary.poems }
+    private var allNightingaleCouplets: [Poem] { NightingaleCouplets.couplets }
 
-    private var revealedNightingaleCouplets: [Poem] {
-        revealedPoemsStore.getRevealedNightingaleCouplets()
-    }
-
+    // Filtered poems (applies poet → favorites → search)
     private var filteredPoems: [Poem] {
-        if searchText.isEmpty {
-            return revealedPoems
+        var result = allPoems
+
+        if let poet = selectedPoet {
+            result = result.filter { $0.poet == poet }
         }
-        return revealedPoems.filter { poem in
-            poem.persian.localizedCaseInsensitiveContains(searchText) ||
-            poem.english.localizedCaseInsensitiveContains(searchText) ||
-            poem.culturalNote.localizedCaseInsensitiveContains(searchText) ||
-            poem.reflection.localizedCaseInsensitiveContains(searchText)
+
+        if showFavoritesOnly {
+            result = result.filter { revealedPoemsStore.isFavorite($0) }
         }
+
+        if !searchText.isEmpty {
+            result = result.filter { poem in
+                if revealedPoemsStore.isRevealed(poem) {
+                    return poem.poet.localizedCaseInsensitiveContains(searchText) ||
+                           poem.persian.localizedCaseInsensitiveContains(searchText) ||
+                           poem.english.localizedCaseInsensitiveContains(searchText) ||
+                           poem.culturalNote.localizedCaseInsensitiveContains(searchText) ||
+                           poem.reflection.localizedCaseInsensitiveContains(searchText)
+                } else {
+                    // Locked: only match poet name
+                    return poem.poet.localizedCaseInsensitiveContains(searchText)
+                }
+            }
+        }
+
+        return result
     }
 
     private var filteredNightingaleCouplets: [Poem] {
-        if searchText.isEmpty {
-            return revealedNightingaleCouplets
+        var result = allNightingaleCouplets
+
+        if let poet = selectedPoet {
+            result = result.filter { $0.poet == poet }
         }
-        return revealedNightingaleCouplets.filter { poem in
-            poem.persian.localizedCaseInsensitiveContains(searchText) ||
-            poem.english.localizedCaseInsensitiveContains(searchText) ||
-            poem.culturalNote.localizedCaseInsensitiveContains(searchText) ||
-            poem.reflection.localizedCaseInsensitiveContains(searchText)
+
+        if showFavoritesOnly {
+            result = result.filter { revealedPoemsStore.isFavorite($0) }
         }
+
+        if !searchText.isEmpty {
+            result = result.filter { poem in
+                if revealedPoemsStore.revealedNightingaleIDs.contains(poem.id) {
+                    return poem.poet.localizedCaseInsensitiveContains(searchText) ||
+                           poem.persian.localizedCaseInsensitiveContains(searchText) ||
+                           poem.english.localizedCaseInsensitiveContains(searchText) ||
+                           poem.culturalNote.localizedCaseInsensitiveContains(searchText) ||
+                           poem.reflection.localizedCaseInsensitiveContains(searchText)
+                } else {
+                    return poem.poet.localizedCaseInsensitiveContains(searchText)
+                }
+            }
+        }
+
+        return result
+    }
+
+    // Revealed subsets for swipe navigation
+    private var revealedFilteredPoems: [Poem] {
+        filteredPoems.filter { revealedPoemsStore.isRevealed($0) }
+    }
+
+    private var revealedFilteredNightingale: [Poem] {
+        filteredNightingaleCouplets.filter { revealedPoemsStore.revealedNightingaleIDs.contains($0.id) }
     }
 
     private var revealedPoetBios: [PoetBio] {
-        let allPoems = revealedPoems + revealedNightingaleCouplets
-        let poetNames = Set(allPoems.map(\.poet))
-        return PoetBio.all.filter { poetNames.contains($0.id) }
+        let allRevealed = revealedPoemsStore.getRevealedPoems() + revealedPoemsStore.getRevealedNightingaleCouplets()
+        let poetNames = Set(allRevealed.map(\.poet))
+        var bios = PoetBio.all.filter { poetNames.contains($0.id) }
+
+        if let poet = selectedPoet {
+            bios = bios.filter { $0.id == poet }
+        }
+
+        if !searchText.isEmpty {
+            bios = bios.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText) ||
+                $0.homeland.localizedCaseInsensitiveContains(searchText) ||
+                $0.bio.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+
+        return bios
+    }
+
+    // Unique poets across all poems for filter chips
+    private var allPoetNames: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for poem in PoemLibrary.poems + NightingaleCouplets.couplets {
+            if seen.insert(poem.poet).inserted {
+                result.append(poem.poet)
+            }
+        }
+        return result
+    }
+
+    // Whether POTD should be visible
+    private var shouldShowPOTD: Bool {
+        guard !showFavoritesOnly,
+              let potd = revealedPoemsStore.poemOfTheDay else { return false }
+        if let poet = selectedPoet, potd.poet != poet { return false }
+        return true
     }
 
     // App palette
-    private let bgColor = Color(red: 0.02, green: 0.08, blue: 0.18)
-    private let cardColor = Color.white.opacity(0.07)
+    private let bgBase = Color(red: 0.04, green: 0.06, blue: 0.14)
+    private let cardColor = Color(red: 0.95, green: 0.88, blue: 0.7).opacity(0.06)
     private let rose = Color(red: 0.9, green: 0.4, blue: 0.5)
     private let gold = Color(red: 1.0, green: 0.85, blue: 0.55)
+    private let highlight = Color(red: 1.0, green: 0.75, blue: 0.2)
 
     private let tileColumns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12)
     ]
 
+    // MARK: - Body
+
     var body: some View {
         ZStack {
-            bgColor.ignoresSafeArea()
+            // Layered warm background
+            bgBase.ignoresSafeArea()
 
-            if revealedPoems.isEmpty && revealedNightingaleCouplets.isEmpty {
+            RadialGradient(
+                colors: [Color(red: 0.18, green: 0.14, blue: 0.08).opacity(0.4), .clear],
+                center: .init(x: 0.5, y: 0.1),
+                startRadius: 20,
+                endRadius: 500
+            )
+            .ignoresSafeArea()
+
+            Color(red: 1.0, green: 0.85, blue: 0.55).opacity(0.03)
+                .ignoresSafeArea()
+
+            // Dust particles
+            LibraryDustCanvas(reduceMotion: reduceMotion)
+
+            if revealedPoemsStore.getRevealedPoems().isEmpty && revealedPoemsStore.getRevealedNightingaleCouplets().isEmpty {
                 emptyStateView
             } else {
                 ScrollView {
                     VStack(spacing: 20) {
+                        // Poem of the Day
+                        if shouldShowPOTD, let potd = revealedPoemsStore.poemOfTheDay {
+                            poemOfTheDayCard(potd)
+                        }
+
+                        // Filter bar
+                        filterBar
+
+                        // Favorites empty state
+                        if showFavoritesOnly && filteredPoems.isEmpty && filteredNightingaleCouplets.isEmpty {
+                            favoritesEmptyState
+                        }
+
                         // Lotus poems
                         if !filteredPoems.isEmpty {
                             sectionHeader(
                                 icon: "LotusFull",
                                 title: "From the Lotus",
                                 subtitle: "Verses that bloomed from the pool",
-                                count: revealedPoems.count,
+                                count: revealedPoemsStore.revealedCount,
                                 total: revealedPoemsStore.totalPoemsCount
                             )
 
                             LazyVGrid(columns: tileColumns, spacing: 12) {
-                                ForEach(filteredPoems) { poem in
-                                    NavigationLink(destination: PoemDetailView(poem: poem)) {
-                                        poemTile(poem, accent: rose)
+                                ForEach(Array(filteredPoems.enumerated()), id: \.element.id) { _, poem in
+                                    if revealedPoemsStore.isRevealed(poem) {
+                                        let revealedList = revealedFilteredPoems
+                                        let idx = revealedList.firstIndex(where: { $0.id == poem.id }) ?? 0
+                                        NavigationLink(destination: PoemDetailView(poems: revealedList, currentIndex: idx)) {
+                                            poemTile(poem, accent: rose)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityElement(children: .ignore)
+                                        .accessibilityLabel("\(poem.poet). \(poem.english)")
+                                        .accessibilityHint("Double tap to view full poem")
+                                    } else {
+                                        lockedPoemTile(poem)
                                     }
-                                    .buttonStyle(.plain)
-                                    .accessibilityElement(children: .ignore)
-                                    .accessibilityLabel("\(poem.poet). \(poem.english)")
-                                    .accessibilityHint("Double tap to view full poem")
                                 }
                             }
+                        }
+
+                        // Persian divider
+                        if !filteredPoems.isEmpty && !filteredNightingaleCouplets.isEmpty {
+                            persianDivider
                         }
 
                         // Nightingale couplets
@@ -145,25 +263,36 @@ struct LibraryView: View {
                                 icon: "Nightingale02",
                                 title: "From the Nightingale",
                                 subtitle: "Couplets gifted by the garden's songbird",
-                                count: revealedNightingaleCouplets.count,
+                                count: revealedPoemsStore.revealedNightingaleCount,
                                 total: NightingaleCouplets.couplets.count
                             )
 
                             LazyVGrid(columns: tileColumns, spacing: 12) {
-                                ForEach(filteredNightingaleCouplets) { couplet in
-                                    NavigationLink(destination: PoemDetailView(poem: couplet)) {
-                                        poemTile(couplet, accent: rose)
+                                ForEach(Array(filteredNightingaleCouplets.enumerated()), id: \.element.id) { _, couplet in
+                                    if revealedPoemsStore.revealedNightingaleIDs.contains(couplet.id) {
+                                        let revealedList = revealedFilteredNightingale
+                                        let idx = revealedList.firstIndex(where: { $0.id == couplet.id }) ?? 0
+                                        NavigationLink(destination: PoemDetailView(poems: revealedList, currentIndex: idx)) {
+                                            poemTile(couplet, accent: rose)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityElement(children: .ignore)
+                                        .accessibilityLabel("\(couplet.poet). \(couplet.english)")
+                                        .accessibilityHint("Double tap to view full couplet")
+                                    } else {
+                                        lockedPoemTile(couplet)
                                     }
-                                    .buttonStyle(.plain)
-                                    .accessibilityElement(children: .ignore)
-                                    .accessibilityLabel("\(couplet.poet). \(couplet.english)")
-                                    .accessibilityHint("Double tap to view full couplet")
                                 }
                             }
                         }
 
+                        // Persian divider
+                        if !filteredNightingaleCouplets.isEmpty && !revealedPoetBios.isEmpty {
+                            persianDivider
+                        }
+
                         // Poet biographies
-                        if !revealedPoetBios.isEmpty {
+                        if !revealedPoetBios.isEmpty && !showFavoritesOnly {
                             poetsSectionHeader
 
                             ForEach(revealedPoetBios) { poet in
@@ -180,8 +309,173 @@ struct LibraryView: View {
         .navigationBarTitleDisplayMode(.large)
         .searchable(text: $searchText, prompt: "Search poems...")
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbarBackground(bgColor, for: .navigationBar)
+        .toolbarBackground(bgBase, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+    }
+
+    // MARK: - Poem of the Day
+
+    private func poemOfTheDayCard(_ poem: Poem) -> some View {
+        NavigationLink(destination: PoemDetailView(poem: poem)) {
+            VStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sun.max.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(gold)
+                    Text("Poem of the Day")
+                        .font(.system(size: 12, weight: .semibold, design: .serif))
+                        .foregroundStyle(gold)
+                        .textCase(.uppercase)
+                        .tracking(1.5)
+                    Spacer()
+                }
+
+                Text(poem.english)
+                    .font(.system(size: 16, weight: .medium, design: .serif))
+                    .italic()
+                    .foregroundStyle(.white.opacity(0.9))
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text("— \(poem.poet)")
+                    .font(.system(size: 12, weight: .medium, design: .serif))
+                    .foregroundStyle(gold.opacity(0.7))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.25, green: 0.20, blue: 0.08).opacity(0.5),
+                                Color(red: 0.15, green: 0.12, blue: 0.05).opacity(0.3)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(gold.opacity(0.3), lineWidth: 0.5)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Poem of the Day by \(poem.poet). \(poem.english)")
+    }
+
+    // MARK: - Filter Bar
+
+    private var filterBar: some View {
+        HStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    filterChip("All", isSelected: selectedPoet == nil) {
+                        withAnimation(.easeInOut(duration: 0.2)) { selectedPoet = nil }
+                    }
+
+                    ForEach(allPoetNames, id: \.self) { poet in
+                        filterChip(poet, isSelected: selectedPoet == poet) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedPoet = selectedPoet == poet ? nil : poet
+                            }
+                        }
+                    }
+                }
+            }
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showFavoritesOnly.toggle()
+                }
+            } label: {
+                Image(systemName: showFavoritesOnly ? "heart.fill" : "heart")
+                    .font(.system(size: 16))
+                    .foregroundStyle(showFavoritesOnly ? rose : .white.opacity(0.5))
+                    .frame(width: 36, height: 32)
+                    .background(
+                        Capsule()
+                            .fill(showFavoritesOnly ? rose.opacity(0.2) : Color.white.opacity(0.06))
+                    )
+            }
+            .accessibilityLabel(showFavoritesOnly ? "Show all poems" : "Show favorites only")
+        }
+        .padding(.top, 4)
+    }
+
+    private func filterChip(_ label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 13, weight: .medium, design: .serif))
+                .foregroundStyle(isSelected ? .black : .white.opacity(0.6))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? gold : Color.white.opacity(0.06))
+                )
+        }
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    // MARK: - Favorites Empty State
+
+    private var favoritesEmptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "heart")
+                .font(.system(size: 32, weight: .thin))
+                .foregroundStyle(rose.opacity(0.4))
+
+            Text("No favorites yet")
+                .font(.system(size: 16, weight: .medium, design: .serif))
+                .foregroundStyle(.white.opacity(0.6))
+
+            Text("Tap the heart on any poem to save it.")
+                .font(.system(size: 13, design: .serif))
+                .foregroundStyle(.white.opacity(0.35))
+        }
+        .padding(.vertical, 40)
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Persian Divider
+
+    private var persianDivider: some View {
+        HStack(spacing: 6) {
+            gradientLine
+
+            // Three nested diamonds: small-large-small
+            diamond(size: 4)
+            diamond(size: 7)
+            diamond(size: 4)
+
+            gradientLine
+        }
+        .frame(height: 20)
+        .padding(.vertical, 4)
+    }
+
+    private var gradientLine: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [.clear, gold.opacity(0.25), .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(height: 0.5)
+    }
+
+    private func diamond(size: CGFloat) -> some View {
+        Rectangle()
+            .fill(gold.opacity(0.3))
+            .frame(width: size, height: size)
+            .rotationEffect(.degrees(45))
     }
 
     // MARK: - Section Header
@@ -241,32 +535,122 @@ struct LibraryView: View {
 
     // MARK: - Poem Tile
 
+    /// Returns (label, snippet) when the search matched a field not visible in the tile.
+    private func hiddenMatchContext(for poem: Poem) -> (label: String, snippet: String)? {
+        guard !searchText.isEmpty else { return nil }
+
+        let visibleMatch =
+            poem.poet.localizedCaseInsensitiveContains(searchText) ||
+            poem.english.localizedCaseInsensitiveContains(searchText) ||
+            poem.persian.localizedCaseInsensitiveContains(searchText)
+        if visibleMatch { return nil }
+
+        if poem.culturalNote.localizedCaseInsensitiveContains(searchText) {
+            return ("Cultural Note", snippetAround(searchText, in: poem.culturalNote))
+        }
+        if poem.reflection.localizedCaseInsensitiveContains(searchText) {
+            return ("Reflection", snippetAround(searchText, in: poem.reflection))
+        }
+        return nil
+    }
+
+    /// Extracts a short window of text centered on the first match.
+    private func snippetAround(_ query: String, in text: String, window: Int = 50) -> String {
+        guard let range = text.range(of: query, options: .caseInsensitive) else { return text }
+
+        let matchStart = text.distance(from: text.startIndex, to: range.lowerBound)
+        let matchEnd   = text.distance(from: text.startIndex, to: range.upperBound)
+
+        let snippetStart = max(0, matchStart - window / 2)
+        let snippetEnd   = min(text.count, matchEnd + window / 2)
+
+        let lo = text.index(text.startIndex, offsetBy: snippetStart)
+        let hi = text.index(text.startIndex, offsetBy: snippetEnd)
+        var snippet = String(text[lo..<hi])
+
+        if snippetStart > 0 { snippet = "\u{2026}" + snippet }
+        if snippetEnd < text.count { snippet += "\u{2026}" }
+        return snippet
+    }
+
+    /// Returns a `Text` with search matches highlighted in a warm amber.
+    private func highlighted(_ text: String, baseColor: Color) -> Text {
+        guard !searchText.isEmpty else {
+            return Text(text).foregroundColor(baseColor)
+        }
+
+        var result = Text("")
+        var cursor = text.startIndex
+
+        while cursor < text.endIndex,
+              let range = text.range(of: searchText, options: .caseInsensitive,
+                                     range: cursor..<text.endIndex) {
+            if cursor < range.lowerBound {
+                result = result + Text(text[cursor..<range.lowerBound])
+                    .foregroundColor(baseColor)
+            }
+            result = result + Text(text[range])
+                .foregroundColor(highlight)
+                .bold()
+
+            cursor = range.upperBound
+        }
+
+        if cursor < text.endIndex {
+            result = result + Text(text[cursor..<text.endIndex])
+                .foregroundColor(baseColor)
+        }
+
+        return result
+    }
+
     private func poemTile(_ poem: Poem, accent: Color) -> some View {
         VStack(spacing: 8) {
-            Text(poem.poet)
+            highlighted(poem.poet, baseColor: accent.opacity(0.7))
                 .font(.system(size: 10, weight: .semibold, design: .serif))
-                .foregroundStyle(accent.opacity(0.7))
                 .textCase(.uppercase)
                 .tracking(1.5)
 
-            Text(poem.english)
+            highlighted(poem.english, baseColor: .white)
                 .font(.system(size: 14, weight: .medium, design: .serif))
                 .italic()
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.white)
                 .minimumScaleFactor(0.8)
 
-            // Gold ornament separator
             Circle()
                 .fill(gold.opacity(0.35))
                 .frame(width: 4, height: 4)
 
-            Text(poem.persian)
+            highlighted(poem.persian, baseColor: .white.opacity(0.45))
                 .font(.system(size: 11, weight: .medium, design: .serif))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.white.opacity(0.45))
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
+
+            // Show context when match is in a non-visible field
+            if let match = hiddenMatchContext(for: poem) {
+                VStack(spacing: 2) {
+                    Text(match.label)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(gold.opacity(0.5))
+                        .textCase(.uppercase)
+
+                    highlighted(match.snippet, baseColor: .white.opacity(0.35))
+                        .font(.system(size: 10, design: .serif))
+                        .italic()
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                }
+                .padding(.top, 2)
+            }
+
+            // Favorite indicator
+            if revealedPoemsStore.isFavorite(poem) {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(rose.opacity(0.5))
+                    .padding(.top, 2)
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity)
@@ -278,6 +662,39 @@ struct LibraryView: View {
                         .stroke(accent.opacity(0.15), lineWidth: 0.5)
                 )
         )
+    }
+
+    // MARK: - Locked Poem Tile
+
+    private func lockedPoemTile(_ poem: Poem) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(.white.opacity(0.15))
+
+            Text(poem.poet)
+                .font(.system(size: 10, weight: .semibold, design: .serif))
+                .foregroundStyle(.white.opacity(0.25))
+                .textCase(.uppercase)
+                .tracking(1.5)
+
+            Text("A verse awaits...")
+                .font(.system(size: 12, weight: .medium, design: .serif))
+                .italic()
+                .foregroundStyle(.white.opacity(0.15))
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.white.opacity(0.03))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
+                )
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Locked poem by \(poem.poet). Visit the garden to reveal it.")
     }
 
     // MARK: - Poets Section
@@ -322,14 +739,13 @@ struct LibraryView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(poet.name)
+                    highlighted(poet.name, baseColor: gold)
                         .font(.system(size: 18, weight: .semibold, design: .serif))
-                        .foregroundStyle(gold)
 
                     HStack(spacing: 8) {
                         Text(poet.years)
-                        Text("·")
-                        Text(poet.homeland)
+                        Text("\u{00B7}")
+                        highlighted(poet.homeland, baseColor: .white.opacity(0.4))
                     }
                     .font(.system(size: 12, design: .serif))
                     .foregroundStyle(.white.opacity(0.4))
@@ -337,9 +753,8 @@ struct LibraryView: View {
                 Spacer()
             }
 
-            Text(poet.bio)
+            highlighted(poet.bio, baseColor: .white.opacity(0.75))
                 .font(.system(size: 14, design: .serif))
-                .foregroundStyle(.white.opacity(0.75))
                 .lineSpacing(4)
         }
         .padding(20)

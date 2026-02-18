@@ -46,7 +46,8 @@ enum MovementStyle: CaseIterable {
 
 struct GardenView: View {
     @EnvironmentObject var revealedPoemsStore: RevealedPoemsStore
-    @Binding var showMainApp: Bool  // ✅ ADDED: For back button
+    @Binding var showMainApp: Bool
+    var isActive: Bool = true  // pause updates when off-screen (e.g. Library tab)
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
     @State private var showPoem = false
@@ -68,6 +69,32 @@ struct GardenView: View {
     @State private var showNightingaleCouplet = false
     @State private var currentNightingaleCouplet: Poem?
     @State private var nightingaleAppearOpacity: Double = 0
+    @State private var poolPoemsSinceNightingale: Int = 0
+    @State private var nightingaleWhisperOpacity: Double = 0
+    @State private var currentDepartureWhisper: String = ""
+    @State private var showApproachFeather = false
+    @State private var featherFallProgress: CGFloat = 0
+    @State private var featherOpacity: Double = 0
+    @State private var showApproachWhisper = false
+    @State private var currentApproachWhisper: String = ""
+
+    private let departureWhispers = [
+        "The nightingale shall return\u{2026}",
+        "Its song lingers in the wind\u{2026}",
+        "Patience\u{2026} the melody returns\u{2026}",
+        "A promise carried on the breeze\u{2026}",
+        "The song fades, but not forever\u{2026}",
+        "Until the garden calls again\u{2026}",
+    ]
+
+    private let approachWhispers = [
+        "A distant song stirs\u{2026}",
+        "Do you hear it\u{2026} a familiar melody\u{2026}",
+        "The wind carries a golden note\u{2026}",
+        "Something stirs among the branches\u{2026}",
+        "A flutter of wings, drawing near\u{2026}",
+        "The garden hums with anticipation\u{2026}",
+    ]
 
     // Hint system
     @StateObject private var hintStore = GardenHintStore()
@@ -149,7 +176,9 @@ struct GardenView: View {
                     }
                 }
 
-                GardenParticleCanvas(petalBurst: petalBurst, reduceMotion: reduceMotion)
+                if isActive {
+                    GardenParticleCanvas(petalBurst: petalBurst, reduceMotion: reduceMotion)
+                }
 
                 ForEach(fireflies) { firefly in
                     Circle()
@@ -166,7 +195,6 @@ struct GardenView: View {
                             )
                         )
                         .frame(width: firefly.size * 2, height: firefly.size * 2)
-                        .blur(radius: firefly.size * 0.3)
                         .position(firefly.position)
                 }
 
@@ -176,6 +204,7 @@ struct GardenView: View {
                     GardenHintView(
                         stage: stage,
                         targetPosition: hintPosition(for: stage, in: geo.size),
+                        screenSize: geo.size,
                         reduceMotion: reduceMotion
                     )
                     .allowsHitTesting(false)
@@ -192,6 +221,7 @@ struct GardenView: View {
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                     currentPoem = nil
+                                    checkNightingaleApproachHint()
                                 }
                             } else {
                                 withAnimation(.easeOut(duration: 0.4)) {
@@ -199,6 +229,7 @@ struct GardenView: View {
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                                     currentPoem = nil
+                                    checkNightingaleApproachHint()
                                 }
                             }
                         }
@@ -230,7 +261,7 @@ struct GardenView: View {
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                     currentNightingaleCouplet = nil
-                                    nightingaleFlyBackIn()
+                                    nightingaleDismiss()
                                 }
                             } else {
                                 withAnimation(.easeOut(duration: 0.4)) {
@@ -238,7 +269,7 @@ struct GardenView: View {
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                                     currentNightingaleCouplet = nil
-                                    nightingaleFlyBackIn()
+                                    nightingaleDismiss()
                                 }
                             }
                         }
@@ -260,6 +291,26 @@ struct GardenView: View {
                     .allowsHitTesting(false)
                 }
 
+                // Nightingale departure whisper
+                Color.black.opacity(0.3 * nightingaleWhisperOpacity)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+
+                Text(currentDepartureWhisper)
+                    .font(.system(size: 16, weight: .light, design: .serif))
+                    .italic()
+                    .foregroundColor(Color(red: 1.0, green: 0.92, blue: 0.65))
+                    .shadow(color: .black.opacity(0.8), radius: 8)
+                    .opacity(nightingaleWhisperOpacity)
+                    .position(x: geo.size.width * 0.5, y: geo.size.height * 0.42)
+                    .allowsHitTesting(false)
+
+                // Golden feather + whisper — nightingale approaching hint
+                if showApproachFeather || showApproachWhisper {
+                    nightingaleApproachHintView(in: geo.size)
+                        .allowsHitTesting(false)
+                }
+
             }
         }
         .ignoresSafeArea()
@@ -267,7 +318,6 @@ struct GardenView: View {
             for _ in 0..<6 {
                 spawnFirefly(screenSize: UIScreen.main.bounds.size, randomY: true)
             }
-            checkNightingaleAppearance()
 
             // Show hints after a short delay so the scene establishes first
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
@@ -277,6 +327,11 @@ struct GardenView: View {
             }
         }
         .onReceive(timer) { now in
+            guard isActive else {
+                lastUpdateTime = nil  // reset so no dt spike when resuming
+                return
+            }
+
             let dt: TimeInterval
             if let last = lastUpdateTime {
                 dt = min(now.timeIntervalSince(last), 0.1)
@@ -294,8 +349,6 @@ struct GardenView: View {
                 updateFireflies(dt: dt, screenSize: UIScreen.main.bounds.size)
                 updateWaterRipples()
             }
-
-            checkNightingaleAppearance()
         }
     }
 
@@ -348,18 +401,124 @@ struct GardenView: View {
     private func handleTap(at location: CGPoint, in size: CGSize) {
         let normalized = CGPoint(x: location.x / size.width,
                                  y: location.y / size.height)
-        addNewPad(at: normalized)
+        let safePoint = pushInsidePool(normalized, margin: 0.07)
+
+        // Remove oldest pad BEFORE finding spot, so we don't avoid a pad that's leaving
+        if pads.count >= 5 {
+            if reduceMotion {
+                pads.removeFirst()
+            } else {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    pads.removeFirst()
+                }
+            }
+        }
+
+        let separated = findNonOverlappingSpot(near: safePoint, screenSize: size)
+        createLilyPad(at: separated)
         createWaterRipple(at: location)
         petalBurst += 1
         bobNearbyPads(tapLocation: normalized)
         hintStore.markPoolTapped()
     }
 
+    /// Nudges a point toward the pool center until it's `margin` inside every edge.
+    private func pushInsidePool(_ point: CGPoint, margin: CGFloat) -> CGPoint {
+        if isPointInPoolPolygon(point, margin: margin) { return point }
+
+        let center = CGPoint(x: 0.65, y: 0.82)
+        var result = point
+        for _ in 0..<20 {
+            if isPointInPoolPolygon(result, margin: margin) { break }
+            result = CGPoint(
+                x: result.x + (center.x - result.x) * 0.15,
+                y: result.y + (center.y - result.y) * 0.15
+            )
+        }
+        return result
+    }
+
+    /// Minimum center-to-center pixel distance (pad diameter + quarter-pad gap).
+    private func padMinPixels(_ screenSize: CGSize) -> CGFloat {
+        let padPx = screenSize.width * 0.12
+        return padPx * 1.25 // pad + quarter-pad gap
+    }
+
+    /// Euclidean pixel distance between two normalized points.
+    private func pixelDistance(_ a: CGPoint, _ b: CGPoint, screenSize: CGSize) -> CGFloat {
+        let dx = (a.x - b.x) * screenSize.width
+        let dy = (a.y - b.y) * screenSize.height
+        return sqrt(dx * dx + dy * dy)
+    }
+
+    /// Checks overlap using Euclidean pixel distance (accounts for aspect ratio).
+    private func padsOverlapInPixels(_ a: CGPoint, _ b: CGPoint, screenSize: CGSize) -> Bool {
+        pixelDistance(a, b, screenSize: screenSize) < padMinPixels(screenSize)
+    }
+
+    /// Finds the nearest position to `tap` that doesn't overlap any existing pad.
+    /// Uses a fine grid search across the pool; falls back to the farthest-from-pads spot.
+    private func findNonOverlappingSpot(near tap: CGPoint, screenSize: CGSize) -> CGPoint {
+        // Quick check — tap position might already be clear
+        if !pads.contains(where: { padsOverlapInPixels(tap, $0.anchor, screenSize: screenSize) }) {
+            return tap
+        }
+
+        let minPx = padMinPixels(screenSize)
+        var bestClearPoint: CGPoint? = nil
+        var bestClearDist = CGFloat.infinity
+
+        // Fallback: position whose minimum distance to any pad is largest
+        var fallbackPoint = tap
+        var fallbackMaxMinDist: CGFloat = -1
+
+        let step: CGFloat = 0.01
+        var y: CGFloat = 0.58
+        while y <= 1.02 {
+            var x: CGFloat = 0.18
+            while x <= 1.08 {
+                let candidate = CGPoint(x: x, y: y)
+                guard isPointInPoolPolygon(candidate, margin: 0.07) else {
+                    x += step; continue
+                }
+
+                // Minimum pixel distance to any existing pad
+                var closestPadDist = CGFloat.infinity
+                for pad in pads {
+                    let d = pixelDistance(candidate, pad.anchor, screenSize: screenSize)
+                    closestPadDist = min(closestPadDist, d)
+                }
+
+                // Track fallback (best spot even if not fully clear)
+                if closestPadDist > fallbackMaxMinDist {
+                    fallbackMaxMinDist = closestPadDist
+                    fallbackPoint = candidate
+                }
+
+                // Clear spot — pick the one closest to the original tap
+                if closestPadDist >= minPx {
+                    let distToTap = pixelDistance(candidate, tap, screenSize: screenSize)
+                    if distToTap < bestClearDist {
+                        bestClearDist = distToTap
+                        bestClearPoint = candidate
+                    }
+                }
+
+                x += step
+            }
+            y += step
+        }
+
+        return bestClearPoint ?? fallbackPoint
+    }
+
     private func updatePads(dt: TimeInterval) {
-        let s = CGFloat(dt / 0.08) // scale factor: 1.0 at the old 12.5fps rate
+        let s = CGFloat(dt / 0.08)
+        let screenSize = UIScreen.main.bounds.size
+        let minPx = padMinPixels(screenSize)
 
         for index in pads.indices {
-            // Spring-damper bob (scaled for frame rate)
+            // Vertical bob (spring-damper)
             if abs(pads[index].bobOffset) > 0.01 || abs(pads[index].bobVelocity) > 0.01 {
                 pads[index].bobVelocity += -pads[index].bobOffset * 0.3 * s
                 pads[index].bobVelocity *= pow(0.85, s)
@@ -373,30 +532,59 @@ struct GardenView: View {
                 pads[index].glowIntensity = max(0, pads[index].glowIntensity - 0.015 * s)
             }
 
+            // 1. Compute desired movement
             let movement = calculateMovement(for: pads[index], time: time)
-            var newPosition = CGPoint(
-                x: pads[index].anchor.x + movement.x * s,
-                y: pads[index].anchor.y + movement.y * s
-            )
+            var dx = movement.x * s
+            var dy = movement.y * s
 
-            if pads.count > 1 {
-                let minDistance: CGFloat = 0.16
-                for otherIndex in pads.indices where otherIndex != index {
-                    let dist = distance(newPosition, pads[otherIndex].anchor)
-                    if dist < minDistance && dist > 0.001 {
-                        let pushStrength = (minDistance - dist) * 0.03 * s
-                        let dx = (newPosition.x - pads[otherIndex].anchor.x) / dist
-                        let dy = (newPosition.y - pads[otherIndex].anchor.y) / dist
-                        newPosition.x += dx * pushStrength
-                        newPosition.y += dy * pushStrength
+            // 2. Pixel-space collision: cancel approach + gentle repulsion
+            let current = pads[index].anchor
+            for otherIndex in pads.indices where otherIndex != index {
+                let other = pads[otherIndex].anchor
+                let pxDist = pixelDistance(current, other, screenSize: screenSize)
+
+                if pxDist < minPx && pxDist > 0.5 {
+                    // Direction in pixel space
+                    let dxPx = (other.x - current.x) * screenSize.width
+                    let dyPx = (other.y - current.y) * screenSize.height
+                    let nxPx = dxPx / pxDist
+                    let nyPx = dyPx / pxDist
+
+                    // Movement in pixel space
+                    let movePxX = dx * screenSize.width
+                    let movePxY = dy * screenSize.height
+
+                    // Cancel approach component
+                    let dot = movePxX * nxPx + movePxY * nyPx
+                    if dot > 0 {
+                        dx -= (dot * nxPx) / screenSize.width
+                        dy -= (dot * nyPx) / screenSize.height
                     }
+
+                    // Gentle repulsion to slowly separate any existing overlap
+                    let overlap = minPx - pxDist
+                    let repulsionPx = overlap * 0.02 * s
+                    dx -= (nxPx * repulsionPx) / screenSize.width
+                    dy -= (nyPx * repulsionPx) / screenSize.height
                 }
             }
+
+            // 3. Apply clamped movement (no sudden jumps)
+            let maxStep: CGFloat = 0.003 * s
+            let stepLen = sqrt(dx * dx + dy * dy)
+            if stepLen > maxStep {
+                let scale = maxStep / stepLen
+                dx *= scale
+                dy *= scale
+            }
+
+            let newPosition = CGPoint(x: current.x + dx, y: current.y + dy)
 
             if isPointInPool(newPosition) {
                 pads[index].anchor = newPosition
             }
 
+            // Pick a new wander target when close enough
             let distToTarget = distance(pads[index].anchor, pads[index].targetAnchor)
             if distToTarget < 0.04 || Int(time * 12) % 120 == index * 24 {
                 pads[index].targetAnchor = randomPointInPool()
@@ -405,24 +593,6 @@ struct GardenView: View {
                     pads[index].phase = CGFloat.random(in: 0...(2 * .pi))
                 }
             }
-        }
-    }
-
-    private func addNewPad(at position: CGPoint) {
-        if pads.count >= 5 {
-            if reduceMotion {
-                pads.removeFirst()
-                createLilyPad(at: position)
-            } else {
-                withAnimation(.easeOut(duration: 0.3)) {
-                    pads.removeFirst()
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    createLilyPad(at: position)
-                }
-            }
-        } else {
-            createLilyPad(at: position)
         }
     }
 
@@ -473,6 +643,11 @@ struct GardenView: View {
         }
 
         hintStore.markPadTapped()
+
+        poolPoemsSinceNightingale += 1
+        if poolPoemsSinceNightingale >= 3 && !showNightingale {
+            nightingaleFlyIn()
+        }
     }
 
     private func bobNearbyPads(tapLocation: CGPoint) {
@@ -487,15 +662,57 @@ struct GardenView: View {
 
     // MARK: - Nightingale
 
-    private func checkNightingaleAppearance() {
-        guard !showNightingale, revealedPoemsStore.revealedCount >= 3 else { return }
+    private func nightingaleFlyIn() {
+        // Advance to next perch
+        nightingalePerchIndex = (nightingalePerchIndex + 1) % nightingalePerchPositions.count
+        let destination = nightingalePerchPositions[nightingalePerchIndex]
+
+        // Enter from the opposite side of the destination
+        let enterFromRight = destination.x < 0.5
+        let enterX: CGFloat = enterFromRight ? 1.15 : -0.15
+        let enterY: CGFloat = destination.y - 0.15
+        nightingaleFacingRight = !enterFromRight
+
         showNightingale = true
-        nightingalePosition = nightingalePerchPositions[nightingalePerchIndex]
+        nightingaleIsPerched = false
+
         if reduceMotion {
+            nightingalePosition = destination
+            nightingaleIsPerched = true
             nightingaleAppearOpacity = 1
         } else {
-            withAnimation(.easeIn(duration: 1.5)) {
+            // Snap to off-screen entry point (invisible)
+            nightingalePosition = CGPoint(x: enterX, y: enterY)
+            nightingaleAppearOpacity = 0
+
+            let midX = (enterX + destination.x) / 2
+
+            // Phase 1: Glide in from off-screen, rising to arc peak
+            withAnimation(.easeOut(duration: 0.5)) {
+                nightingalePosition = CGPoint(x: midX, y: destination.y - 0.26)
                 nightingaleAppearOpacity = 1
+            }
+
+            // Phase 2: Descend toward the perch area
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                withAnimation(.easeInOut(duration: 0.45)) {
+                    nightingalePosition = CGPoint(
+                        x: destination.x + (enterFromRight ? 0.04 : -0.04),
+                        y: destination.y - 0.06
+                    )
+                }
+            }
+
+            // Phase 3: Settle onto perch with a gentle spring bob
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.65)) {
+                    nightingalePosition = destination
+                }
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                nightingaleIsPerched = true
+                petalBurst += 1  // landing burst
             }
         }
     }
@@ -553,57 +770,206 @@ struct GardenView: View {
         }
     }
 
-    private func nightingaleFlyBackIn() {
-        // Advance to next perch
-        nightingalePerchIndex = (nightingalePerchIndex + 1) % nightingalePerchPositions.count
-        let destination = nightingalePerchPositions[nightingalePerchIndex]
+    private func checkNightingaleApproachHint() {
+        guard poolPoemsSinceNightingale == 2,
+              !showApproachFeather else { return }
 
-        // Enter from the opposite side of the destination
-        let enterFromRight = destination.x < 0.5
-        let enterX: CGFloat = enterFromRight ? 1.15 : -0.15
-        let enterY: CGFloat = destination.y - 0.15
-        // Face toward the destination (opposite of entry side)
-        nightingaleFacingRight = !enterFromRight
+        // Pick approach whisper for this cycle
+        currentApproachWhisper = approachWhispers[
+            nightingaleCoupletIndex % approachWhispers.count
+        ]
 
         if reduceMotion {
-            nightingalePosition = destination
-            nightingaleIsPerched = true
-            nightingaleAppearOpacity = 1
+            // Just show the whisper text
+            withAnimation(.easeIn(duration: 0.5)) {
+                showApproachWhisper = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                withAnimation(.easeOut(duration: 0.8)) {
+                    showApproachWhisper = false
+                }
+            }
         } else {
-            // Snap to off-screen entry point (no animation)
-            nightingalePosition = CGPoint(x: enterX, y: enterY)
+            triggerNightingaleApproachHint()
+        }
+    }
 
-            let midX = (enterX + destination.x) / 2
+    private func triggerNightingaleApproachHint() {
+        showApproachFeather = true
+        featherFallProgress = 0
+        featherOpacity = 0
 
-            // Phase 1: Glide in from off-screen, rising to arc peak
-            withAnimation(.easeOut(duration: 0.5)) {
-                nightingalePosition = CGPoint(x: midX, y: destination.y - 0.26)
-                nightingaleAppearOpacity = 1
+        // Feather fades in and drifts down
+        withAnimation(.easeIn(duration: 0.3)) {
+            featherOpacity = 1.0
+        }
+        withAnimation(.easeOut(duration: 2.8)) {
+            featherFallProgress = 1.0
+        }
+
+        // Whisper text appears as feather reaches mid-screen
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            withAnimation(.easeIn(duration: 0.6)) {
+                showApproachWhisper = true
+            }
+        }
+
+        // Feather fades out near the end
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+            withAnimation(.easeOut(duration: 0.6)) {
+                featherOpacity = 0
+            }
+        }
+
+        // Whisper fades out
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+            withAnimation(.easeOut(duration: 0.8)) {
+                showApproachWhisper = false
+            }
+        }
+
+        // Reset feather state
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
+            showApproachFeather = false
+            featherFallProgress = 0
+        }
+    }
+
+    @ViewBuilder
+    private func nightingaleApproachHintView(in size: CGSize) -> some View {
+        let startY: CGFloat = -30
+        let endY: CGFloat = size.height * 0.45
+        let currentY = startY + (endY - startY) * featherFallProgress
+
+        // Gentle S-curve sway as it falls
+        let swayX = sin(featherFallProgress * .pi * 2.5) * 22
+        let baseX = size.width * 0.48
+
+        // Rotation: tilts as it drifts
+        let rotation = -25.0 + Double(featherFallProgress) * 55.0
+
+        ZStack {
+            // Dim overlay — darkens the garden so the light stands out
+            if showApproachFeather {
+                Color.black
+                    .opacity(0.3 * featherOpacity)
+                    .ignoresSafeArea()
             }
 
-            // Phase 2: Descend toward the perch area
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                withAnimation(.easeInOut(duration: 0.45)) {
-                    nightingalePosition = CGPoint(
-                        x: destination.x + (enterFromRight ? 0.04 : -0.04),
-                        y: destination.y - 0.06
+            // Holy light — golden cone raying down from above
+            if showApproachFeather {
+                let apexX = size.width * 0.48
+                let beamLeft = size.width * 0.15
+                let beamRight = size.width * 0.82
+                let beamBottom = size.height * 0.62
+
+                // Light cone shape
+                Path { path in
+                    path.move(to: CGPoint(x: apexX, y: -10))
+                    path.addLine(to: CGPoint(x: beamLeft, y: beamBottom))
+                    path.addLine(to: CGPoint(x: beamRight, y: beamBottom))
+                    path.closeSubpath()
+                }
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.95, blue: 0.7).opacity(0.22),
+                            Color(red: 1.0, green: 0.92, blue: 0.6).opacity(0.10),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
                     )
-                }
+                )
+                .blur(radius: 18)
+                .opacity(featherOpacity)
+                .ignoresSafeArea()
+
+                // Bright source glow at apex
+                RadialGradient(
+                    colors: [
+                        Color(red: 1.0, green: 0.96, blue: 0.8).opacity(0.35),
+                        Color(red: 1.0, green: 0.92, blue: 0.6).opacity(0.12),
+                        Color.clear
+                    ],
+                    center: UnitPoint(x: apexX / size.width, y: 0),
+                    startRadius: 0,
+                    endRadius: size.height * 0.18
+                )
+                .opacity(featherOpacity)
+                .ignoresSafeArea()
             }
 
-            // Phase 3: Settle onto perch with a gentle spring bob
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.65)) {
-                    nightingalePosition = destination
+            // Drifting golden feather
+            if showApproachFeather {
+                ZStack {
+                    // Soft glow around feather
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color(red: 1.0, green: 0.92, blue: 0.55).opacity(0.35),
+                                    Color.clear
+                                ],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 30
+                            )
+                        )
+                        .frame(width: 60, height: 60)
+
+                    // Feather shape — asymmetric golden leaf
+                    FeatherShape()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 1.0, green: 0.93, blue: 0.58),
+                                    Color(red: 0.92, green: 0.78, blue: 0.38)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: 12, height: 34)
                 }
+                .rotationEffect(.degrees(rotation))
+                .position(x: baseX + swayX, y: currentY)
+                .opacity(featherOpacity)
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-                nightingaleIsPerched = true
-                petalBurst += 1  // landing burst
+            // Whisper text
+            if showApproachWhisper {
+                Text(currentApproachWhisper)
+                    .font(.system(size: 16, weight: .light, design: .serif))
+                    .italic()
+                    .foregroundColor(Color(red: 1.0, green: 0.92, blue: 0.65))
+                    .shadow(color: .black.opacity(0.8), radius: 8)
+                    .position(x: size.width * 0.5, y: size.height * 0.52)
+                    .transition(.opacity)
             }
         }
     }
+
+    private func nightingaleDismiss() {
+        showNightingale = false
+        nightingaleAppearOpacity = 0
+        nightingaleIsPerched = true
+        poolPoemsSinceNightingale = 0
+
+        // Departure whisper — cycles through different lines
+        currentDepartureWhisper = departureWhispers[
+            (nightingaleCoupletIndex - 1) % departureWhispers.count
+        ]
+        withAnimation(.easeIn(duration: 0.8)) {
+            nightingaleWhisperOpacity = 1.0
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+            withAnimation(.easeOut(duration: 1.2)) {
+                nightingaleWhisperOpacity = 0
+            }
+        }
+    }
+
 
     private func showBonusCouplet() {
         let couplet = NightingaleCouplets.couplets[nightingaleCoupletIndex % NightingaleCouplets.couplets.count]
@@ -786,7 +1152,7 @@ struct GardenView: View {
     }
 
     private func calculateMovement(for pad: Pad, time: TimeInterval) -> CGPoint {
-        let baseSpeed: CGFloat = 0.0006 * pad.speed
+        let baseSpeed: CGFloat = 0.0003 * pad.speed
 
         switch pad.movementStyle {
         case .gentle:
@@ -824,6 +1190,31 @@ struct GardenView: View {
             let dy = cos(time * 0.15 + pad.phase) * baseSpeed * 1.5
             return CGPoint(x: dx, y: dy)
         }
+    }
+}
+
+struct FeatherShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        var path = Path()
+
+        // Asymmetric feather: tip at top, wider right vane, narrower left
+        path.move(to: CGPoint(x: w * 0.42, y: 0))
+
+        // Right vane — fuller curve
+        path.addQuadCurve(
+            to: CGPoint(x: w * 0.46, y: h),
+            control: CGPoint(x: w * 1.05, y: h * 0.32)
+        )
+
+        // Left vane — tighter curve
+        path.addQuadCurve(
+            to: CGPoint(x: w * 0.42, y: 0),
+            control: CGPoint(x: -w * 0.05, y: h * 0.45)
+        )
+
+        return path
     }
 }
 

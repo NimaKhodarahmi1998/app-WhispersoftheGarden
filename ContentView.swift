@@ -36,10 +36,8 @@ struct ContentView: View {
                         .allowsHitTesting(gardenOpacity > 0)
                 }
 
-                // Petal overlay on top of everything
-                if isTransitioning {
-                    PetalTransitionView(reduceMotion: reduceMotion)
-                }
+                // Petal overlay — always in tree, paused when inactive
+                PetalTransitionView(reduceMotion: reduceMotion, isActive: isTransitioning)
             }
         }
         .onChange(of: showMainApp) { newValue in
@@ -75,24 +73,24 @@ struct ContentView: View {
                 try? await Task.sleep(for: .milliseconds(400))
                 isTransitioning = false
             } else {
-                // Phase 1: Petals build up
-                try? await Task.sleep(for: .milliseconds(900))
+                // Phase 1: Petals sweep in
+                try? await Task.sleep(for: .milliseconds(350))
 
                 // Phase 2: Show garden, cross-dissolve in
                 gardenCreated = true
                 showGarden = true
                 gardenOpacity = 0
 
-                withAnimation(.easeInOut(duration: 1.0)) {
+                withAnimation(.easeInOut(duration: 0.5)) {
                     gardenOpacity = 1.0
                 }
 
                 // Phase 3: Remove landing page
-                try? await Task.sleep(for: .milliseconds(1100))
+                try? await Task.sleep(for: .milliseconds(550))
                 landingVisible = false
 
-                // Phase 4: Petals finish drifting
-                try? await Task.sleep(for: .milliseconds(1000))
+                // Phase 4: Let petals finish their full animation
+                try? await Task.sleep(for: .milliseconds(650))
                 isTransitioning = false
             }
         }
@@ -113,21 +111,21 @@ struct ContentView: View {
                 try? await Task.sleep(for: .milliseconds(400))
                 isTransitioning = false
             } else {
-                // Phase 1: Petals build up
-                try? await Task.sleep(for: .milliseconds(900))
+                // Phase 1: Petals sweep in
+                try? await Task.sleep(for: .milliseconds(350))
 
                 // Phase 2: Cross-dissolve garden out, bring landing back
                 landingVisible = true
 
-                withAnimation(.easeInOut(duration: 1.0)) {
+                withAnimation(.easeInOut(duration: 0.5)) {
                     gardenOpacity = 0
                 }
 
                 // Phase 3: Garden stays alive but hidden (gardenCreated stays true)
-                try? await Task.sleep(for: .milliseconds(1100))
+                try? await Task.sleep(for: .milliseconds(550))
 
-                // Phase 4: Petals finish drifting
-                try? await Task.sleep(for: .milliseconds(1000))
+                // Phase 4: Let petals finish their full animation
+                try? await Task.sleep(for: .milliseconds(650))
                 isTransitioning = false
             }
         }

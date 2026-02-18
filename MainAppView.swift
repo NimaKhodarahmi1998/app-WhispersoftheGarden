@@ -26,7 +26,7 @@ struct MainAppView: View {
     var body: some View {
         ZStack {
             // Content — garden stays alive, library overlays on top
-            GardenView(showMainApp: $showMainApp)
+            GardenView(showMainApp: $showMainApp, isActive: selectedTab == 0 && showMainApp && !isTabTransitioning)
                 .opacity(selectedTab == 0 ? 1 : 0)
                 .allowsHitTesting(selectedTab == 0)
 
@@ -37,10 +37,8 @@ struct MainAppView: View {
                 .transition(.opacity)
             }
 
-            // Petal transition overlay with wind direction
-            if isTabTransitioning {
-                PetalTransitionView(wind: windDirection, reduceMotion: reduceMotion)
-            }
+            // Petal transition overlay — always in tree, paused when inactive
+            PetalTransitionView(wind: windDirection, reduceMotion: reduceMotion, isActive: isTabTransitioning)
 
             // Persian tab bar
             VStack {
@@ -120,19 +118,19 @@ struct MainAppView: View {
         isTabTransitioning = true
 
         Task { @MainActor in
-            // Petals build up
-            try? await Task.sleep(for: .milliseconds(900))
+            // Petals sweep in
+            try? await Task.sleep(for: .milliseconds(350))
 
             // Cross-fade underneath the petals
             if let tab = pendingTab {
-                withAnimation(.easeInOut(duration: 0.8)) {
+                withAnimation(.easeInOut(duration: 0.4)) {
                     selectedTab = tab
                 }
                 pendingTab = nil
             }
 
-            // Petals drift away gracefully
-            try? await Task.sleep(for: .milliseconds(2100))
+            // Let petals finish their full animation
+            try? await Task.sleep(for: .milliseconds(1200))
             isTabTransitioning = false
         }
     }

@@ -10,16 +10,60 @@ import SwiftUI
 
 @MainActor
 class RevealedPoemsStore: ObservableObject {
-    
+
     @Published private(set) var revealedPoemIDs: Set<UUID> = []
     @Published private(set) var revealedNightingaleIDs: Set<UUID> = []
+    @Published private(set) var favoritePoemIDs: Set<UUID> = []
 
     private let userDefaultsKey = "revealedPoemIDs"
     private let nightingaleKey = "revealedNightingaleIDs"
+    private let favoritesKey = "favoritePoemIDs"
 
     init() {
         loadRevealedPoems()
         loadNightingaleCouplets()
+        loadFavorites()
+    }
+
+    // MARK: - Favorites
+
+    func toggleFavorite(_ poem: Poem) {
+        guard revealedPoemIDs.contains(poem.id) || revealedNightingaleIDs.contains(poem.id) else { return }
+        if favoritePoemIDs.contains(poem.id) {
+            favoritePoemIDs.remove(poem.id)
+        } else {
+            favoritePoemIDs.insert(poem.id)
+        }
+        saveFavorites()
+    }
+
+    func isFavorite(_ poem: Poem) -> Bool {
+        favoritePoemIDs.contains(poem.id)
+    }
+
+    private func loadFavorites() {
+        guard let data = UserDefaults.standard.data(forKey: favoritesKey),
+              let stringIDs = try? JSONDecoder().decode([String].self, from: data) else {
+            favoritePoemIDs = []
+            return
+        }
+        favoritePoemIDs = Set(stringIDs.compactMap { UUID(uuidString: $0) })
+    }
+
+    private func saveFavorites() {
+        let stringIDs = favoritePoemIDs.map { $0.uuidString }
+        if let data = try? JSONEncoder().encode(stringIDs) {
+            UserDefaults.standard.set(data, forKey: favoritesKey)
+        }
+    }
+
+    // MARK: - Poem of the Day
+
+    var poemOfTheDay: Poem? {
+        let revealed = getRevealedPoems()
+        guard !revealed.isEmpty else { return nil }
+        let day = Calendar.current.ordinality(of: .day, in: .era, for: Date()) ?? 0
+        return revealed[day % revealed.count]
     }
     
     func revealPoem(_ poem: Poem) {
@@ -118,8 +162,10 @@ class RevealedPoemsStore: ObservableObject {
     func resetAllPoems() {
         revealedPoemIDs.removeAll()
         revealedNightingaleIDs.removeAll()
+        favoritePoemIDs.removeAll()
         UserDefaults.standard.removeObject(forKey: userDefaultsKey)
         UserDefaults.standard.removeObject(forKey: nightingaleKey)
+        UserDefaults.standard.removeObject(forKey: favoritesKey)
     }
     #endif
 }
