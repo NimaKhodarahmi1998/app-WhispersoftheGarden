@@ -276,7 +276,13 @@ struct GardenView: View {
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                     currentPoem = nil
-                                    checkNightingaleApproachHint()
+                                    if poolPoemsSinceNightingale >= 3 && !showNightingale {
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            nightingaleFlyIn()
+                                        }
+                                    } else {
+                                        checkNightingaleApproachHint()
+                                    }
                                 }
                             } else {
                                 withAnimation(.easeOut(duration: 0.4)) {
@@ -284,7 +290,13 @@ struct GardenView: View {
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                                     currentPoem = nil
-                                    checkNightingaleApproachHint()
+                                    if poolPoemsSinceNightingale >= 3 && !showNightingale {
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            nightingaleFlyIn()
+                                        }
+                                    } else {
+                                        checkNightingaleApproachHint()
+                                    }
                                 }
                             }
                         }
@@ -464,6 +476,10 @@ struct GardenView: View {
     }
 
     private func handleTap(at location: CGPoint, in size: CGSize) {
+        // Block taps while another action is in progress
+        guard !showPoem, !showNightingaleCouplet,
+              !nightingaleInFlight, !showApproachFeather else { return }
+
         let normalized = CGPoint(x: location.x / size.width,
                                  y: location.y / size.height)
         let safePoint = pushInsidePool(normalized, margin: 0.07)
@@ -687,6 +703,10 @@ struct GardenView: View {
     }
 
     private func handlePadTap(_ pad: Pad) {
+        // Block taps while another action is in progress
+        guard !showPoem, !showNightingaleCouplet,
+              !nightingaleInFlight, !showApproachFeather else { return }
+
         guard !pad.isLotus,
               let index = pads.firstIndex(where: { $0.id == pad.id }) else { return }
 
@@ -717,9 +737,6 @@ struct GardenView: View {
         hintStore.markThirdPadTapped()
 
         poolPoemsSinceNightingale += 1
-        if poolPoemsSinceNightingale >= 3 && !showNightingale {
-            nightingaleFlyIn()
-        }
     }
 
     private func bobNearbyPads(tapLocation: CGPoint) {
