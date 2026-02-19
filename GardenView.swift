@@ -79,6 +79,15 @@ struct GardenView: View {
     @State private var showApproachWhisper = false
     @State private var currentApproachWhisper: String = ""
 
+    // Bounding flight animation (timer-driven, NOT SwiftUI animation)
+    @State private var nightingaleFlightT: CGFloat = 0
+    @State private var nightingaleInFlight = false
+    @State private var nightingaleFlightOrigin: CGPoint = .zero
+    @State private var nightingaleFlightDest: CGPoint = .zero
+    @State private var nightingaleIsFlyingOut = false
+    @State private var nightingaleFlightStartTime: Date?
+    @State private var nightingaleFlightDuration: TimeInterval = 2.2
+
     private let departureWhispers = [
         "The nightingale shall return\u{2026}",
         "Its song lingers in the wind\u{2026}",
@@ -160,17 +169,45 @@ struct GardenView: View {
                     renderPad(pad, in: geo.size)
                 }
 
-                // Nightingale — between pads and particle canvas
+                // Nightingale hint glow — rendered BEHIND the bird so it looks backlit
+                if showNightingale {
+                    if let stage = hintStore.activeHint, stage == .tapNightingale,
+                       hintVisible, !showApproachFeather, !showApproachWhisper {
+                        GardenHintView(
+                            stage: stage,
+                            targetPosition: hintPosition(for: stage, in: geo.size),
+                            screenSize: geo.size,
+                            reduceMotion: reduceMotion,
+                            mode: .tutorial
+                        )
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                    }
+
+                    if let invitation = invitationStage(in: geo.size),
+                       invitation.stage == .tapNightingale, hintVisible {
+                        GardenHintView(
+                            stage: invitation.stage,
+                            targetPosition: invitation.position,
+                            screenSize: geo.size,
+                            reduceMotion: reduceMotion,
+                            mode: .invitation
+                        )
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                    }
+                }
+
+                // Nightingale — rendered on top of its glow
                 if showNightingale {
                     NightingaleView(
                         size: geo.size.width * 0.10,
                         isPerched: nightingaleIsPerched
                     )
-                    .scaleEffect(x: nightingaleFacingRight ? 1 : -1, y: 1)
-                    .position(
-                        x: nightingalePosition.x * geo.size.width,
-                        y: nightingalePosition.y * geo.size.height
-                    )
+                    .scaleEffect(x: nightingaleFacingRight ? 1 : -1,
+                                 y: nightingaleCurrentWingPulse)
+                    .rotationEffect(.degrees(nightingaleCurrentBodyAngle))
+                    .position(nightingaleScreenPos(in: geo.size))
                     .opacity(nightingaleAppearOpacity)
                     .onTapGesture {
                         handleNightingaleTap(in: geo.size)
@@ -199,9 +236,10 @@ struct GardenView: View {
                         .position(firefly.position)
                 }
 
-                // Garden hints — tutorial
+                // Garden hints — tutorial (non-nightingale; nightingale renders behind the bird)
                 if let stage = hintStore.activeHint, hintVisible,
-                   !(stage == .tapNightingale && !showNightingale) {
+                   stage != .tapNightingale,
+                   !showApproachFeather, !showApproachWhisper {
                     GardenHintView(
                         stage: stage,
                         targetPosition: hintPosition(for: stage, in: geo.size),
@@ -213,8 +251,9 @@ struct GardenView: View {
                     .transition(.opacity)
                 }
 
-                // Garden hints — persistent invitation glow (post-tutorial)
-                if let invitation = invitationStage(in: geo.size), hintVisible {
+                // Garden hints — persistent invitation glow (non-nightingale)
+                if let invitation = invitationStage(in: geo.size), hintVisible,
+                   invitation.stage != .tapNightingale {
                     GardenHintView(
                         stage: invitation.stage,
                         targetPosition: invitation.position,
@@ -366,6 +405,15 @@ struct GardenView: View {
                 updateFireflies(dt: dt, screenSize: UIScreen.main.bounds.size)
                 updateWaterRipples()
             }
+
+            // Timer-driven bounding flight — updated every frame
+            if nightingaleInFlight, let startTime = nightingaleFlightStartTime {
+                let elapsed = now.timeIntervalSince(startTime)
+                nightingaleFlightT = CGFloat(min(elapsed / nightingaleFlightDuration, 1.0))
+                if nightingaleFlightT >= 1.0 {
+                    completeNightingaleFlight()
+                }
+            }
         }
     }
 
@@ -438,6 +486,8 @@ struct GardenView: View {
         petalBurst += 1
         bobNearbyPads(tapLocation: normalized)
         hintStore.markPoolTapped()
+        hintStore.markPoolTappedAgain()
+        hintStore.markPoolTappedThrice()
     }
 
     /// Nudges a point toward the pool center until it's `margin` inside every edge.
@@ -663,6 +713,8 @@ struct GardenView: View {
         }
 
         hintStore.markPadTapped()
+        hintStore.markSecondPadTapped()
+        hintStore.markThirdPadTapped()
 
         poolPoemsSinceNightingale += 1
         if poolPoemsSinceNightingale >= 3 && !showNightingale {
@@ -685,57 +737,34 @@ struct GardenView: View {
     private func nightingaleFlyIn() {
         audio.playSFX(.wingFlutter)
 
-        // Advance to next perch
         nightingalePerchIndex = (nightingalePerchIndex + 1) % nightingalePerchPositions.count
         let destination = nightingalePerchPositions[nightingalePerchIndex]
 
-        // Enter from the opposite side of the destination
         let enterFromRight = destination.x < 0.5
         let enterX: CGFloat = enterFromRight ? 1.15 : -0.15
-        let enterY: CGFloat = destination.y - 0.15
+        let enterY: CGFloat = destination.y - 0.10
         nightingaleFacingRight = !enterFromRight
 
         showNightingale = true
         nightingaleIsPerched = false
+        nightingaleIsFlyingOut = false
 
         if reduceMotion {
             nightingalePosition = destination
             nightingaleIsPerched = true
             nightingaleAppearOpacity = 1
         } else {
-            // Snap to off-screen entry point (invisible)
-            nightingalePosition = CGPoint(x: enterX, y: enterY)
+            nightingaleFlightOrigin = CGPoint(x: enterX, y: enterY)
+            nightingaleFlightDest = destination
+            nightingaleFlightT = 0
+            nightingaleFlightDuration = 2.6
+            nightingaleFlightStartTime = Date()
+            nightingaleInFlight = true
             nightingaleAppearOpacity = 0
 
-            let midX = (enterX + destination.x) / 2
-
-            // Phase 1: Glide in from off-screen, rising to arc peak
-            withAnimation(.easeOut(duration: 0.5)) {
-                nightingalePosition = CGPoint(x: midX, y: destination.y - 0.26)
+            // Fade in gently
+            withAnimation(.easeIn(duration: 0.6)) {
                 nightingaleAppearOpacity = 1
-            }
-
-            // Phase 2: Descend toward the perch area
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                withAnimation(.easeInOut(duration: 0.45)) {
-                    nightingalePosition = CGPoint(
-                        x: destination.x + (enterFromRight ? 0.04 : -0.04),
-                        y: destination.y - 0.06
-                    )
-                }
-            }
-
-            // Phase 3: Settle onto perch with a gentle spring bob
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.65)) {
-                    nightingalePosition = destination
-                }
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-                nightingaleIsPerched = true
-                petalBurst += 1  // landing burst
-                audio.playSFX(.nightingaleChirp)
             }
         }
     }
@@ -759,38 +788,20 @@ struct GardenView: View {
             nightingaleAppearOpacity = 0
             showBonusCouplet()
         } else {
-            petalBurst += 1  // takeoff burst
+            petalBurst += 1
+            nightingaleIsFlyingOut = true
+            nightingaleFlightOrigin = startPos
+            nightingaleFlightDest = CGPoint(x: exitX, y: startPos.y - 0.08)
+            nightingaleFlightT = 0
+            nightingaleFlightDuration = 2.2
+            nightingaleFlightStartTime = Date()
+            nightingaleInFlight = true
 
-            let dir: CGFloat = flyOutRight ? 1 : -1
-
-            // Phase 1: Lift off — rise upward with slight lateral drift
-            withAnimation(.easeOut(duration: 0.45)) {
-                nightingalePosition = CGPoint(
-                    x: startPos.x + dir * 0.10,
-                    y: startPos.y - 0.22
-                )
-            }
-
-            // Phase 2: Cruise — glide across at peak height
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    nightingalePosition = CGPoint(
-                        x: startPos.x + dir * 0.45,
-                        y: startPos.y - 0.28
-                    )
-                }
-            }
-
-            // Phase 3: Sweep out — descend slightly and exit, fade
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                withAnimation(.easeIn(duration: 0.5)) {
-                    nightingalePosition = CGPoint(x: exitX, y: startPos.y - 0.15)
+            // Fade out gently in the second half
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+                withAnimation(.easeIn(duration: 1.1)) {
                     nightingaleAppearOpacity = 0
                 }
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.35) {
-                showBonusCouplet()
             }
         }
     }
@@ -825,37 +836,38 @@ struct GardenView: View {
         featherFallProgress = 0
         featherOpacity = 0
 
-        // Feather fades in and drifts down
-        withAnimation(.easeIn(duration: 0.3)) {
+        // Feather fades in gently
+        withAnimation(.easeIn(duration: 1.0)) {
             featherOpacity = 1.0
         }
-        withAnimation(.easeOut(duration: 2.8)) {
+        // Linear fall over 7 seconds — slow, graceful descent
+        withAnimation(.linear(duration: 7.0)) {
             featherFallProgress = 1.0
         }
 
-        // Whisper text appears as feather reaches mid-screen
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            withAnimation(.easeIn(duration: 0.6)) {
+        // Whisper text appears mid-fall
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(.easeIn(duration: 0.8)) {
                 showApproachWhisper = true
             }
         }
 
-        // Feather fades out near the end
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
-            withAnimation(.easeOut(duration: 0.6)) {
+        // Feather fades out very gradually over 2 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.5) {
+            withAnimation(.easeOut(duration: 2.0)) {
                 featherOpacity = 0
             }
         }
 
         // Whisper fades out
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
-            withAnimation(.easeOut(duration: 0.8)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6.5) {
+            withAnimation(.easeOut(duration: 1.2)) {
                 showApproachWhisper = false
             }
         }
 
-        // Reset feather state
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
+        // Reset feather state — after everything has fully faded
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8.5) {
             showApproachFeather = false
             featherFallProgress = 0
         }
@@ -863,35 +875,60 @@ struct GardenView: View {
 
     @ViewBuilder
     private func nightingaleApproachHintView(in size: CGSize) -> some View {
-        let startY: CGFloat = -30
-        let endY: CGFloat = size.height * 0.45
-        let currentY = startY + (endY - startY) * featherFallProgress
+        // --- Feather dancing with the wind ---
+        // Layered sinusoids at irrational frequency ratios = organic, never-repeating motion
+        let t = Double(featherFallProgress)
+        let time = t * 7.0
 
-        // Gentle S-curve sway as it falls
-        let swayX = sin(featherFallProgress * .pi * 2.5) * 22
+        let buildUp = min(1.0, time / 1.0)
+
+        // Lateral sway: three overlapping waves at irrational ratios
+        // Creates an unpredictable drift — sometimes wide, sometimes tight
+        let sway1 = sin(2.0 * .pi * 0.45 * time)               // slow base
+        let sway2 = sin(2.0 * .pi * 0.45 * 1.618 * time) * 0.5 // golden ratio
+        let sway3 = sin(2.0 * .pi * 0.45 * 0.73 * time) * 0.35 // slow modulation
+        let swayAmplitude: CGFloat = size.width * 0.13 * CGFloat(buildUp)
+        let swayX = CGFloat(sway1 + sway2 + sway3) * swayAmplitude / 1.85
+
         let baseX = size.width * 0.48
 
-        // Rotation: tilts as it drifts
-        let rotation = -25.0 + Double(featherFallProgress) * 55.0
+        // Vertical: slow descent with irregular bobbing
+        let startY: CGFloat = -40
+        let endY: CGFloat = size.height * 0.65
+        let baseY = startY + (endY - startY) * CGFloat(t)
+        // Two lift frequencies: feather hesitates and floats at irregular intervals
+        let lift1 = cos(2.0 * .pi * 0.72 * time) * 6.0
+        let lift2 = cos(2.0 * .pi * 0.45 * time) * 4.0
+        let currentY = baseY + CGFloat(lift1 + lift2) * CGFloat(buildUp)
+
+        // Rotation: feather tumbles and dances — NOT always pointing down
+        // Three layered rotations create a complex, wind-blown tumble
+        let rot1 = 50.0 * sin(2.0 * .pi * 0.45 * time)                // wide sweep
+        let rot2 = 40.0 * sin(2.0 * .pi * 0.45 * 1.618 * time)       // golden ratio offset
+        let rot3 = 25.0 * sin(2.0 * .pi * 0.45 * 2.247 * time)       // faster flutter
+        let rotation = (rot1 + rot2 + rot3) * buildUp
+
+        let gold = Color(red: 1.0, green: 0.92, blue: 0.65)
+        let warmGold = Color(red: 1.0, green: 0.85, blue: 0.45)
 
         ZStack {
-            // Dim overlay — darkens the garden so the light stands out
+            // Deep dim overlay — isolates the moment
             if showApproachFeather {
                 Color.black
-                    .opacity(0.3 * featherOpacity)
+                    .opacity(0.45 * featherOpacity)
                     .ignoresSafeArea()
             }
 
-            // Holy light — golden cone raying down from above
+            // Golden light cone
             if showApproachFeather {
                 let apexX = size.width * 0.48
-                let beamLeft = size.width * 0.15
-                let beamRight = size.width * 0.82
-                let beamBottom = size.height * 0.62
+                let beamLeft = size.width * 0.08
+                let beamRight = size.width * 0.88
+                let beamBottom = size.height * 0.70
 
-                // Light cone shape
+                // Outer soft cone
                 Path { path in
-                    path.move(to: CGPoint(x: apexX, y: -10))
+                    path.move(to: CGPoint(x: apexX, y: -20))
                     path.addLine(to: CGPoint(x: beamLeft, y: beamBottom))
                     path.addLine(to: CGPoint(x: beamRight, y: beamBottom))
                     path.closeSubpath()
@@ -899,64 +936,179 @@ struct GardenView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 1.0, green: 0.95, blue: 0.7).opacity(0.22),
-                            Color(red: 1.0, green: 0.92, blue: 0.6).opacity(0.10),
+                            warmGold.opacity(0.30),
+                            gold.opacity(0.14),
+                            gold.opacity(0.05),
                             Color.clear
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
-                .blur(radius: 18)
+                .blur(radius: 24)
+                .opacity(featherOpacity)
+                .ignoresSafeArea()
+
+                // Inner bright cone
+                Path { path in
+                    path.move(to: CGPoint(x: apexX, y: -20))
+                    path.addLine(to: CGPoint(x: size.width * 0.28, y: beamBottom * 0.85))
+                    path.addLine(to: CGPoint(x: size.width * 0.68, y: beamBottom * 0.85))
+                    path.closeSubpath()
+                }
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.18),
+                            warmGold.opacity(0.10),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .blur(radius: 14)
                 .opacity(featherOpacity)
                 .ignoresSafeArea()
 
                 // Bright source glow at apex
                 RadialGradient(
                     colors: [
-                        Color(red: 1.0, green: 0.96, blue: 0.8).opacity(0.35),
-                        Color(red: 1.0, green: 0.92, blue: 0.6).opacity(0.12),
+                        Color.white.opacity(0.30),
+                        warmGold.opacity(0.25),
+                        gold.opacity(0.10),
                         Color.clear
                     ],
                     center: UnitPoint(x: apexX / size.width, y: 0),
                     startRadius: 0,
-                    endRadius: size.height * 0.18
+                    endRadius: size.height * 0.24
                 )
                 .opacity(featherOpacity)
                 .ignoresSafeArea()
             }
 
-            // Drifting golden feather
+            // Feather with physics-based motion
             if showApproachFeather {
                 ZStack {
-                    // Soft glow around feather
+                    // Outer warm halo — follows the feather
                     Circle()
                         .fill(
                             RadialGradient(
                                 colors: [
-                                    Color(red: 1.0, green: 0.92, blue: 0.55).opacity(0.35),
+                                    warmGold.opacity(0.28),
+                                    gold.opacity(0.12),
                                     Color.clear
                                 ],
                                 center: .center,
                                 startRadius: 0,
-                                endRadius: 30
+                                endRadius: 60
                             )
                         )
-                        .frame(width: 60, height: 60)
+                        .frame(width: 120, height: 120)
 
-                    // Feather shape — asymmetric golden leaf
-                    FeatherShape()
+                    // Inner bright glow
+                    Circle()
                         .fill(
-                            LinearGradient(
+                            RadialGradient(
                                 colors: [
-                                    Color(red: 1.0, green: 0.93, blue: 0.58),
-                                    Color(red: 0.92, green: 0.78, blue: 0.38)
+                                    Color.white.opacity(0.30),
+                                    warmGold.opacity(0.18),
+                                    Color.clear
                                 ],
-                                startPoint: .top,
-                                endPoint: .bottom
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 24
                             )
                         )
-                        .frame(width: 12, height: 34)
+                        .frame(width: 48, height: 48)
+
+                    // The feather itself — layered rendering
+                    ZStack {
+                        // Vane fill — rich golden gradient with subtle warmth variation
+                        FeatherShape()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 1.0, green: 0.97, blue: 0.78),
+                                        Color(red: 1.0, green: 0.92, blue: 0.58),
+                                        Color(red: 0.95, green: 0.82, blue: 0.42),
+                                        warmGold,
+                                        Color(red: 0.82, green: 0.65, blue: 0.28)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+
+                        // Inner vane shading — subtle darker tone on the wider side
+                        FeatherShape()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.clear,
+                                        Color(red: 0.78, green: 0.58, blue: 0.20).opacity(0.12),
+                                        Color(red: 0.72, green: 0.50, blue: 0.15).opacity(0.18),
+                                        Color.clear
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+
+                        // Barb texture — fine lines from rachis
+                        FeatherBarbs()
+                            .stroke(
+                                Color(red: 0.80, green: 0.62, blue: 0.24).opacity(0.30),
+                                lineWidth: 0.6
+                            )
+
+                        // Rachis — dark golden shaft with taper
+                        FeatherRachis()
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.70, green: 0.52, blue: 0.18).opacity(0.8),
+                                        Color(red: 0.76, green: 0.58, blue: 0.22).opacity(0.6),
+                                        Color(red: 0.65, green: 0.46, blue: 0.14).opacity(0.7)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                style: StrokeStyle(lineWidth: 1.3, lineCap: .round)
+                            )
+
+                        // Light-catching edge highlight
+                        FeatherShape()
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.45),
+                                        warmGold.opacity(0.25),
+                                        Color.clear,
+                                        warmGold.opacity(0.10)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 0.7
+                            )
+
+                        // Calamus highlight — pale translucent quill base
+                        FeatherCalamus()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.clear,
+                                        Color.white.opacity(0.15),
+                                        Color(red: 0.95, green: 0.90, blue: 0.75).opacity(0.25)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    }
+                    .frame(width: 32, height: 70)
+                    .shadow(color: warmGold.opacity(0.7), radius: 12)
                 }
                 .rotationEffect(.degrees(rotation))
                 .position(x: baseX + swayX, y: currentY)
@@ -966,11 +1118,18 @@ struct GardenView: View {
             // Whisper text
             if showApproachWhisper {
                 Text(currentApproachWhisper)
-                    .font(.system(size: 16, weight: .light, design: .serif))
+                    .font(.system(size: 18, weight: .regular, design: .serif))
                     .italic()
-                    .foregroundColor(Color(red: 1.0, green: 0.92, blue: 0.65))
-                    .shadow(color: .black.opacity(0.8), radius: 8)
-                    .position(x: size.width * 0.5, y: size.height * 0.52)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.white, gold],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .shadow(color: warmGold.opacity(0.4), radius: 12)
+                    .shadow(color: .black.opacity(0.8), radius: 6)
+                    .position(x: size.width * 0.5, y: size.height * 0.55)
                     .transition(.opacity)
             }
         }
@@ -997,6 +1156,193 @@ struct GardenView: View {
         }
     }
 
+    // MARK: - Nightingale Sprite (computed position/rotation during flight)
+
+    private func nightingaleScreenPos(in size: CGSize) -> CGPoint {
+        if nightingaleInFlight {
+            let raw = nightingaleIsFlyingOut
+                ? nightingaleFlyOutPos(t: nightingaleFlightT)
+                : nightingaleFlyInPos(t: nightingaleFlightT)
+            return CGPoint(x: raw.x * size.width, y: raw.y * size.height)
+        }
+        return CGPoint(x: nightingalePosition.x * size.width,
+                       y: nightingalePosition.y * size.height)
+    }
+
+    private var nightingaleCurrentBodyAngle: Double {
+        nightingaleInFlight ? nightingaleBodyAngle(t: nightingaleFlightT) : 0
+    }
+
+    private var nightingaleCurrentWingPulse: CGFloat {
+        nightingaleInFlight ? nightingaleWingPulse(t: nightingaleFlightT) : 1
+    }
+
+    // MARK: - Bounding Flight Path
+    //
+    // Smooth passerine flight — gentle undulating arc with soft body tilt.
+    // Prioritizes calming, flowing motion over mechanical accuracy.
+    // Pure sine bounding (3 gentle cycles), wide numerical derivative window
+    // for buttery body rotation, no tremor, minimal wing pulse.
+
+    /// Fly-in: off-screen → perch, 3 gentle bounding cycles over a sweeping arc
+    private func nightingaleFlyInPos(t: CGFloat) -> CGPoint {
+        let o = nightingaleFlightOrigin
+        let d = nightingaleFlightDest
+
+        // --- Horizontal: smooth ease-in-out ---
+        let tEase = t * t * (3 - 2 * t)   // smoothstep — very gentle acceleration/deceleration
+        let baseX = o.x + (d.x - o.x) * tEase
+
+        // Soft lateral drift — one slow sine, nothing sharp
+        let drift = sin(2 * .pi * 1.618 * t) * 0.005 * sin(.pi * t)
+        let x = baseX + drift
+
+        // --- Vertical: sweeping arc with soft bounding ---
+        let arcPeak: CGFloat = 0.18
+        let baseY = o.y + (d.y - o.y) * tEase - arcPeak * sin(.pi * t)
+
+        // Gentle bounding: pure sine, 3 cycles, soft amplitude envelope
+        let numBounds: CGFloat = 3
+        let wave = sin(2 * .pi * numBounds * t)
+
+        // Envelope: slow build → sustain → long smooth fade for landing
+        let boundAmp: CGFloat = 0.026
+        let env: CGFloat
+        if t < 0.15 {
+            let s = t / 0.15; env = s * s * (3 - 2 * s)       // smoothstep in
+        } else if t < 0.60 {
+            env = 1.0
+        } else {
+            let s = (t - 0.60) / 0.40; env = 1.0 - s * s      // quadratic fade
+        }
+
+        return CGPoint(x: x, y: baseY + boundAmp * env * wave)
+    }
+
+    /// Fly-out: perch → off-screen, gentle rise then flowing cruise
+    private func nightingaleFlyOutPos(t: CGFloat) -> CGPoint {
+        let o = nightingaleFlightOrigin
+        let d = nightingaleFlightDest
+
+        // --- Horizontal: gentle ease-in ---
+        let tEase: CGFloat
+        if t < 0.25 {
+            // Slow start — bird lifts first, drifts second
+            let s = t / 0.25
+            tEase = s * s * 0.08                              // barely moves laterally
+        } else {
+            let s = (t - 0.25) / 0.75
+            tEase = 0.08 + s * s * (3 - 2 * s) * 0.92        // smoothstep cruise
+        }
+        let baseX = o.x + (d.x - o.x) * tEase
+
+        let drift = sin(2 * .pi * 2.17 * t) * 0.004 * sin(.pi * t)
+        let x = baseX + drift
+
+        // --- Vertical: graceful rise then gentle descent ---
+        let climbHeight: CGFloat = 0.20
+        let baseY: CGFloat
+        if t < 0.28 {
+            // Smooth rise
+            let s = t / 0.28
+            let easedLift = s * s * (3 - 2 * s)              // smoothstep climb
+            baseY = o.y - climbHeight * easedLift
+        } else {
+            // Gentle descent toward exit
+            let s = (t - 0.28) / 0.72
+            let peakY = o.y - climbHeight
+            baseY = peakY + (d.y - peakY) * s * s * (3 - 2 * s)
+        }
+
+        // Soft bounding: 3 cycles
+        let numBounds: CGFloat = 3
+        let wave = sin(2 * .pi * numBounds * t)
+
+        let boundAmp: CGFloat = 0.020
+        let env: CGFloat
+        if t < 0.22 {
+            let s = t / 0.22; env = s * s                     // gentle build
+        } else if t < 0.82 {
+            env = 1.0
+        } else {
+            let s = (t - 0.82) / 0.18; env = 1.0 - s * s
+        }
+
+        return CGPoint(x: x, y: baseY + boundAmp * env * wave)
+    }
+
+    /// Body angle: smooth path-following tilt, no tremor
+    private func nightingaleBodyAngle(t: CGFloat) -> Double {
+        // Wide derivative window → very smooth angle changes
+        let dt: CGFloat = 0.025
+        let p1 = nightingaleIsFlyingOut
+            ? nightingaleFlyOutPos(t: max(0, t - dt))
+            : nightingaleFlyInPos(t: max(0, t - dt))
+        let p2 = nightingaleIsFlyingOut
+            ? nightingaleFlyOutPos(t: min(1, t + dt))
+            : nightingaleFlyInPos(t: min(1, t + dt))
+
+        let dx = abs(p2.x - p1.x)
+        let dy = p2.y - p1.y
+        let rawPitch = atan2(dy, max(dx, 0.0001)) * 180 / .pi
+
+        // Gentle clamp — nothing extreme
+        var angle = max(-25.0, min(25.0, rawPitch))
+
+        // Soft landing pitch-up (last 22%)
+        if !nightingaleIsFlyingOut && t > 0.78 {
+            let s = Double(t - 0.78) / 0.22
+            let smooth = s * s * (3 - 2 * s)
+            angle = angle * (1 - smooth) + (-10.0) * smooth
+        }
+
+        // Gentle takeoff tilt (first 25%)
+        if nightingaleIsFlyingOut && t < 0.25 {
+            let s = 1.0 - Double(t) / 0.25
+            let smooth = s * s * (3 - 2 * s)
+            angle = angle * (1 - smooth) + (-20.0) * smooth
+        }
+
+        return nightingaleFacingRight ? angle : -angle
+    }
+
+    /// Subtle wing pulse — barely there, just a breath of life
+    private func nightingaleWingPulse(t: CGFloat) -> CGFloat {
+        let numBounds: CGFloat = nightingaleIsFlyingOut ? 3 : 3
+        let wave = sin(2 * .pi * numBounds * t)
+
+        // Gentle breathing: 0.97 – 1.02
+        let pulse = 1.0 - 0.025 * wave
+
+        let env: CGFloat
+        if t < 0.10 { let s = t / 0.10; env = s * s }
+        else if t > 0.90 { let s = (1 - t) / 0.10; env = s * s }
+        else { env = 1.0 }
+
+        return 1.0 + (pulse - 1.0) * env
+    }
+
+    /// Called by the timer when flight reaches t ≥ 1.0
+    private func completeNightingaleFlight() {
+        nightingaleInFlight = false
+        nightingaleFlightStartTime = nil
+
+        if nightingaleIsFlyingOut {
+            showBonusCouplet()
+        } else {
+            // Landing: slight downward bob from weight, then spring settle
+            let dest = nightingaleFlightDest
+            nightingalePosition = CGPoint(x: dest.x, y: dest.y + 0.006)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                nightingalePosition = dest
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                nightingaleIsPerched = true
+                petalBurst += 1
+                audio.playSFX(.nightingaleChirp)
+            }
+        }
+    }
 
     private func showBonusCouplet() {
         audio.playSFX(.poemReveal)
@@ -1018,9 +1364,9 @@ struct GardenView: View {
 
     private func hintPosition(for stage: GardenHintStage, in size: CGSize) -> CGPoint {
         switch stage {
-        case .tapPool:
+        case .tapPool, .tapPoolAgain, .tapPoolThrice:
             return CGPoint(x: 0.70 * size.width, y: 0.82 * size.height)
-        case .tapLilyPad:
+        case .tapLilyPad, .tapSecondLilyPad, .tapThirdLilyPad:
             if let firstPad = pads.first(where: { !$0.isLotus }) {
                 return CGPoint(x: firstPad.anchor.x * size.width,
                                y: firstPad.anchor.y * size.height)
@@ -1234,27 +1580,219 @@ struct GardenView: View {
     }
 }
 
+/// Anatomically-informed nightingale contour feather.
+/// Tip at top (y = 0), calamus at bottom (y = h).
+/// Asymmetric vanes: inner (right) ~1.5x wider than outer (left).
+/// Gently curved rachis offset toward the narrower outer vane.
+/// Wispy downy barbs near the calamus, smooth vane above.
 struct FeatherShape: Shape {
     func path(in rect: CGRect) -> Path {
         let w = rect.width
         let h = rect.height
+
+        // Rachis landmarks (gently curved, offset toward outer/left)
+        let rachisX: CGFloat = w * 0.38
+        let tipX: CGFloat = rachisX + w * 0.02
+        let vaneStartY: CGFloat = h * 0.80
+        let widestY: CGFloat = h * 0.36
+        let calamousBottom = CGPoint(x: rachisX, y: h)
+
+        // Vane widths
+        let outerVaneMax: CGFloat = w * 0.26
+        let innerVaneMax: CGFloat = w * 0.44
+
+        // Key points
+        let outerAtWidest = CGPoint(x: rachisX - outerVaneMax, y: widestY)
+        let outerAtVaneStart = CGPoint(x: rachisX - w * 0.03, y: vaneStartY)
+        let innerAtWidest = CGPoint(x: rachisX + innerVaneMax, y: widestY + h * 0.04)
+        let innerAtVaneStart = CGPoint(x: rachisX + w * 0.05, y: vaneStartY)
+
         var path = Path()
 
-        // Asymmetric feather: tip at top, wider right vane, narrower left
-        path.move(to: CGPoint(x: w * 0.42, y: 0))
+        // === TIP (slightly asymmetric, off-center toward outer vane) ===
+        path.move(to: CGPoint(x: tipX, y: 0))
 
-        // Right vane — fuller curve
-        path.addQuadCurve(
-            to: CGPoint(x: w * 0.46, y: h),
-            control: CGPoint(x: w * 1.05, y: h * 0.32)
+        // === OUTER VANE (left, narrower, tighter curvature) ===
+        // Tip → shoulder: gentle outward curve
+        path.addCurve(
+            to: outerAtWidest,
+            control1: CGPoint(x: tipX - w * 0.16, y: h * 0.08),
+            control2: CGPoint(x: rachisX - outerVaneMax - w * 0.01, y: h * 0.20)
+        )
+        // Shoulder → lower vane: with subtle natural waviness
+        path.addCurve(
+            to: CGPoint(x: rachisX - w * 0.14, y: h * 0.58),
+            control1: CGPoint(x: rachisX - outerVaneMax + w * 0.01, y: h * 0.45),
+            control2: CGPoint(x: rachisX - w * 0.18, y: h * 0.52)
+        )
+        // Lower vane → wispy transition zone
+        path.addCurve(
+            to: outerAtVaneStart,
+            control1: CGPoint(x: rachisX - w * 0.10, y: h * 0.65),
+            control2: CGPoint(x: rachisX - w * 0.06, y: h * 0.74)
         )
 
-        // Left vane — tighter curve
-        path.addQuadCurve(
-            to: CGPoint(x: w * 0.42, y: 0),
-            control: CGPoint(x: -w * 0.05, y: h * 0.45)
+        // === CALAMUS (outer side) — narrow translucent quill ===
+        let calamousHalfW: CGFloat = w * 0.016
+        path.addCurve(
+            to: calamousBottom,
+            control1: CGPoint(x: rachisX - calamousHalfW * 1.8, y: h * 0.87),
+            control2: CGPoint(x: rachisX - calamousHalfW, y: h * 0.95)
         )
 
+        // === CALAMUS (inner side) — back up ===
+        path.addCurve(
+            to: innerAtVaneStart,
+            control1: CGPoint(x: rachisX + calamousHalfW, y: h * 0.95),
+            control2: CGPoint(x: rachisX + calamousHalfW * 1.8, y: h * 0.87)
+        )
+
+        // === INNER VANE (right, wider, softer curvature) ===
+        // Wispy transition → lower vane
+        path.addCurve(
+            to: CGPoint(x: rachisX + w * 0.30, y: h * 0.56),
+            control1: CGPoint(x: rachisX + w * 0.09, y: h * 0.74),
+            control2: CGPoint(x: rachisX + w * 0.22, y: h * 0.65)
+        )
+        // Lower vane → widest (fuller bow)
+        path.addCurve(
+            to: innerAtWidest,
+            control1: CGPoint(x: rachisX + w * 0.38, y: h * 0.48),
+            control2: CGPoint(x: rachisX + innerVaneMax + w * 0.02, y: h * 0.42)
+        )
+        // Widest → tip (sweeps back, tip offset toward outer vane)
+        path.addCurve(
+            to: CGPoint(x: tipX, y: 0),
+            control1: CGPoint(x: rachisX + innerVaneMax + w * 0.01, y: h * 0.18),
+            control2: CGPoint(x: tipX + w * 0.24, y: h * 0.06)
+        )
+
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// The rachis (central shaft) — gentle S-curve from calamus to tip.
+struct FeatherRachis: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        let rachisX: CGFloat = w * 0.38
+        let tipX: CGFloat = rachisX + w * 0.02
+
+        var path = Path()
+        path.move(to: CGPoint(x: rachisX, y: h))
+
+        // S-curve: slight left bias low, straightens, slight right near tip
+        path.addCurve(
+            to: CGPoint(x: rachisX - w * 0.005, y: h * 0.55),
+            control1: CGPoint(x: rachisX - w * 0.008, y: h * 0.85),
+            control2: CGPoint(x: rachisX - w * 0.012, y: h * 0.68)
+        )
+        path.addCurve(
+            to: CGPoint(x: tipX, y: 0),
+            control1: CGPoint(x: rachisX + w * 0.008, y: h * 0.35),
+            control2: CGPoint(x: tipX + w * 0.005, y: h * 0.12)
+        )
+        return path
+    }
+}
+
+/// Barb lines radiating from the rachis. Angle varies: shallow near tip, steep near base.
+/// Includes wispy downy barbs near the calamus.
+struct FeatherBarbs: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        let rachisX: CGFloat = w * 0.38
+
+        var path = Path()
+
+        // Main vane barbs (clean, structured)
+        let barbCount = 12
+        let startY = h * 0.14
+        let endY = h * 0.72
+        let step = (endY - startY) / CGFloat(barbCount - 1)
+
+        for i in 0..<barbCount {
+            let y = startY + CGFloat(i) * step
+            let progress = CGFloat(i) / CGFloat(barbCount - 1)
+
+            // Barb angle: ~25° near tip, ~44° near base
+            let angle = 25.0 + Double(progress) * 19.0
+            let rad = angle * .pi / 180.0
+
+            // Rachis x at this y (following the S-curve)
+            let rX = rachisX + w * 0.012 * sin((1.0 - progress) * .pi)
+
+            // Outer barb (shorter, narrower vane side)
+            let outerExtent = w * (0.15 + progress * 0.06)
+            let outerEndX = rX - cos(rad) * outerExtent
+            let outerEndY = y - sin(rad) * outerExtent * 0.55
+            path.move(to: CGPoint(x: rX, y: y))
+            path.addLine(to: CGPoint(x: outerEndX, y: outerEndY))
+
+            // Inner barb (longer, wider vane side)
+            let innerExtent = w * (0.26 + progress * 0.08)
+            let innerEndX = rX + cos(rad) * innerExtent
+            let innerEndY = y - sin(rad) * innerExtent * 0.55
+            path.move(to: CGPoint(x: rX, y: y))
+            path.addLine(to: CGPoint(x: innerEndX, y: innerEndY))
+        }
+
+        // Downy/wispy barbs near calamus (looser, curving outward)
+        let downCount = 4
+        let downStart = h * 0.74
+        let downEnd = h * 0.80
+        let downStep = (downEnd - downStart) / CGFloat(downCount - 1)
+
+        for i in 0..<downCount {
+            let y = downStart + CGFloat(i) * downStep
+            let rX = rachisX
+
+            // Outer downy wisps — curve outward loosely
+            let len = w * CGFloat(0.06 + 0.03 * Double(i))
+            path.move(to: CGPoint(x: rX, y: y))
+            path.addQuadCurve(
+                to: CGPoint(x: rX - len, y: y - len * 0.3),
+                control: CGPoint(x: rX - len * 0.6, y: y + len * 0.2)
+            )
+
+            // Inner downy wisps
+            let iLen = w * CGFloat(0.08 + 0.04 * Double(i))
+            path.move(to: CGPoint(x: rX, y: y))
+            path.addQuadCurve(
+                to: CGPoint(x: rX + iLen, y: y - iLen * 0.25),
+                control: CGPoint(x: rX + iLen * 0.5, y: y + iLen * 0.15)
+            )
+        }
+
+        return path
+    }
+}
+
+/// The pale, translucent calamus (quill base) — bottom ~20% of the feather.
+struct FeatherCalamus: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        let rachisX: CGFloat = w * 0.38
+        let calamousHalfW: CGFloat = w * 0.016
+
+        var path = Path()
+        // Narrow tube from vane start down to bottom
+        path.move(to: CGPoint(x: rachisX - w * 0.03, y: h * 0.80))
+        path.addCurve(
+            to: CGPoint(x: rachisX, y: h),
+            control1: CGPoint(x: rachisX - calamousHalfW * 1.8, y: h * 0.87),
+            control2: CGPoint(x: rachisX - calamousHalfW, y: h * 0.95)
+        )
+        path.addCurve(
+            to: CGPoint(x: rachisX + w * 0.05, y: h * 0.80),
+            control1: CGPoint(x: rachisX + calamousHalfW, y: h * 0.95),
+            control2: CGPoint(x: rachisX + calamousHalfW * 1.8, y: h * 0.87)
+        )
+        path.closeSubpath()
         return path
     }
 }
