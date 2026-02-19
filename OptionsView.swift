@@ -2,7 +2,7 @@
 //  OptionsView.swift
 //  WhispersoftheGardenApp
 //
-//  Audio settings: sound effects toggle, music toggle, volume control.
+//  Audio settings: music toggle, volume control.
 //
 
 import SwiftUI
@@ -29,21 +29,6 @@ struct OptionsView: View {
                     .foregroundColor(gold)
 
                 VStack(spacing: 0) {
-                    // Sound Effects toggle
-                    settingRow(
-                        icon: "speaker.wave.2.fill",
-                        label: "Sound Effects",
-                        accessibilityLabel: "Sound Effects"
-                    ) {
-                        Toggle("", isOn: $audio.isSoundEnabled)
-                            .labelsHidden()
-                            .tint(darkGold)
-                            .accessibilityLabel("Sound Effects")
-                    }
-
-                    Divider()
-                        .background(gold.opacity(0.2))
-
                     // Music toggle
                     settingRow(
                         icon: "music.note",

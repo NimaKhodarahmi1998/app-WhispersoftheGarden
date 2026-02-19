@@ -425,7 +425,7 @@ struct GardenView: View {
             if reduceMotion {
                 pads.removeFirst()
             } else {
-                withAnimation(.easeOut(duration: 0.3)) {
+                _ = withAnimation(.easeOut(duration: 0.3)) {
                     pads.removeFirst()
                 }
             }

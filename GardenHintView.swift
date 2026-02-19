@@ -46,7 +46,7 @@ struct GardenHintView: View {
     }
 
     private var opacityScale: Double {
-        mode == .tutorial ? 1.0 : 0.6
+        mode == .tutorial ? 1.0 : 0.85
     }
 
     private let baseRadius: CGFloat = 28
@@ -74,7 +74,7 @@ struct GardenHintView: View {
         return ZStack {
             // Static spotlight vignette
             RadialGradient(
-                colors: [.clear, Color.black.opacity(0.30 * os)],
+                colors: [.clear, Color.black.opacity(0.40 * os)],
                 center: UnitPoint(
                     x: pos.x / screenSize.width,
                     y: pos.y / screenSize.height
@@ -88,26 +88,32 @@ struct GardenHintView: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [c.opacity(0.35 * os), .clear],
+                        colors: [c.opacity(0.50 * os), c.opacity(0.15 * os), .clear],
                         center: .center,
                         startRadius: 0,
-                        endRadius: 100
+                        endRadius: 130
                     )
                 )
-                .frame(width: 200, height: 200)
+                .frame(width: 260, height: 260)
+                .position(pos)
+
+            // Bright center dot
+            Circle()
+                .fill(c)
+                .frame(width: 12, height: 12)
+                .opacity(0.7 * os)
+                .blur(radius: 3)
                 .position(pos)
 
             // Static ripple ring
             Circle()
-                .stroke(c.opacity(0.5 * os), lineWidth: 3)
-                .blur(radius: 4)
+                .stroke(c.opacity(0.7 * os), lineWidth: 4)
+                .blur(radius: 3)
                 .frame(width: r * 2, height: r * 2)
                 .position(pos)
 
-            if mode == .tutorial {
-                HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
-                          opacity: 0.85, yOffset: 0)
-            }
+            HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
+                      opacity: 0.85 * os, yOffset: 0)
         }
     }
 
@@ -119,8 +125,8 @@ struct GardenHintView: View {
         let pos = targetPosition
         let os = opacityScale
         // breathe interpolates 0→1 for pulsing effects
-        let spotlightOpacity = (0.25 + breathe * 0.15) * os
-        let glowOpacity = (0.25 + breathe * 0.20) * os
+        let spotlightOpacity = (0.35 + breathe * 0.20) * os
+        let glowOpacity = (0.40 + breathe * 0.25) * os
 
         return ZStack {
             // 1. Spotlight vignette
@@ -140,13 +146,21 @@ struct GardenHintView: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [c.opacity(glowOpacity), .clear],
+                        colors: [c.opacity(glowOpacity), c.opacity(glowOpacity * 0.3), .clear],
                         center: .center,
                         startRadius: 0,
-                        endRadius: 100
+                        endRadius: 130
                     )
                 )
-                .frame(width: 200, height: 200)
+                .frame(width: 260, height: 260)
+                .position(pos)
+
+            // 2b. Bright pulsing center dot
+            Circle()
+                .fill(c)
+                .frame(width: 10 + breathe * 4, height: 10 + breathe * 4)
+                .opacity((0.6 + breathe * 0.3) * os)
+                .blur(radius: 3)
                 .position(pos)
 
             // 3. Rising motes
@@ -161,11 +175,9 @@ struct GardenHintView: View {
             HintRippleRing(color: c, baseRadius: r, position: pos, progress: ring2)
                 .opacity(os)
 
-            // 5. Text label with pill (tutorial only)
-            if mode == .tutorial {
-                HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
-                          opacity: textOpacity, yOffset: textOffset)
-            }
+            // 5. Text label with pill
+            HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
+                      opacity: textOpacity * os, yOffset: textOffset)
         }
         .onAppear { startAnimations() }
     }
@@ -201,12 +213,12 @@ private struct HintRippleRing: View {
     let progress: CGFloat
 
     var body: some View {
-        let scale = 1.0 + progress * 1.4
-        let op = Double((1.0 - progress) * 0.7)
+        let scale = 1.0 + progress * 2.0
+        let op = Double((1.0 - progress) * 0.9)
 
         Circle()
-            .stroke(color.opacity(op), lineWidth: 3)
-            .blur(radius: 4)
+            .stroke(color.opacity(op), lineWidth: 4)
+            .blur(radius: 3)
             .frame(width: baseRadius * 2, height: baseRadius * 2)
             .scaleEffect(scale)
             .position(position)
@@ -233,7 +245,7 @@ private final class HintMoteData: ObservableObject, @unchecked Sendable {
     func setup(center: CGPoint) {
         guard !initialized else { return }
         initialized = true
-        for _ in 0..<6 {
+        for _ in 0..<10 {
             motes.append(Self.makeMote(center: center, randomY: true))
         }
     }
@@ -289,13 +301,13 @@ private final class HintMoteData: ObservableObject, @unchecked Sendable {
 
     static func makeMote(center: CGPoint, randomY: Bool) -> HintMote {
         HintMote(
-            x: center.x + .random(in: -20...20),
-            y: randomY ? center.y - .random(in: 0...60) : center.y + .random(in: -5...5),
-            size: .random(in: 1.5...3.0),
-            opacity: .random(in: 0.3...0.6),
-            speed: .random(in: 14...26),
+            x: center.x + .random(in: -28...28),
+            y: randomY ? center.y - .random(in: 0...70) : center.y + .random(in: -5...5),
+            size: .random(in: 2.5...5.0),
+            opacity: .random(in: 0.5...0.85),
+            speed: .random(in: 16...30),
             swayPhase: .random(in: 0...(2 * .pi)),
-            swayAmount: .random(in: 8...20)
+            swayAmount: .random(in: 10...24)
         )
     }
 }
@@ -332,25 +344,29 @@ private struct HintLabel: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 17, weight: .medium, design: .serif))
+            .font(.system(size: 19, weight: .semibold, design: .serif))
             .italic()
             .foregroundStyle(gradient)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
             .background(
                 Capsule()
-                    .fill(Color.black.opacity(0.5))
+                    .fill(Color.black.opacity(0.65))
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(color.opacity(0.35), lineWidth: 1)
+                    )
             )
-            .shadow(color: color.opacity(0.3), radius: 12)
-            .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 2)
+            .shadow(color: color.opacity(0.5), radius: 16)
+            .shadow(color: .black.opacity(0.6), radius: 4, x: 0, y: 2)
             .opacity(opacity)
             .offset(y: yOffset)
-            .position(x: position.x, y: position.y + baseRadius * 2.4)
+            .position(x: position.x, y: position.y + baseRadius * 2.8)
     }
 
     private var gradient: LinearGradient {
         LinearGradient(
-            colors: [.white, color.opacity(0.7)],
+            colors: [.white, color.opacity(0.85)],
             startPoint: .leading,
             endPoint: .trailing
         )
