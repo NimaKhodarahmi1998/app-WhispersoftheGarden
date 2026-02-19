@@ -8,6 +8,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var revealedPoemsStore = RevealedPoemsStore()
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    private let audio = GardenAudioEngine.shared
     @State private var showMainApp = false       // one-shot trigger from LandingPage
     @State private var showOptions = false
     @State private var isTransitioning = false
@@ -54,6 +55,9 @@ struct ContentView: View {
             }
         }
         .animation(nil, value: showMainApp)
+        .onAppear {
+            audio.startEngine()
+        }
     }
 
     // MARK: - Enter Garden
@@ -63,6 +67,8 @@ struct ContentView: View {
         isTransitioning = true
 
         Task { @MainActor in
+            audio.playSFX(.petalWhoosh)
+
             if reduceMotion {
                 // Instant cross-fade with brief overlay
                 try? await Task.sleep(for: .milliseconds(100))
@@ -103,6 +109,8 @@ struct ContentView: View {
         isTransitioning = true
 
         Task { @MainActor in
+            audio.playSFX(.petalWhoosh)
+
             if reduceMotion {
                 // Instant cross-fade with brief overlay
                 try? await Task.sleep(for: .milliseconds(100))

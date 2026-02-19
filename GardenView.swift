@@ -49,6 +49,7 @@ struct GardenView: View {
     @Binding var showMainApp: Bool
     var isActive: Bool = true  // pause updates when off-screen (e.g. Library tab)
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    private let audio = GardenAudioEngine.shared
 
     @State private var showPoem = false
     @State private var currentPoem: Poem?
@@ -229,6 +230,7 @@ struct GardenView: View {
                     Color.black.opacity(showPoem ? 0.4 : 0)
                         .ignoresSafeArea()
                         .onTapGesture {
+                            audio.playSFX(.poemDismiss)
                             if reduceMotion {
                                 withAnimation(.default) {
                                     showPoem = false
@@ -269,6 +271,7 @@ struct GardenView: View {
                     Color.black.opacity(showNightingaleCouplet ? 0.4 : 0)
                         .ignoresSafeArea()
                         .onTapGesture {
+                            audio.playSFX(.poemDismiss)
                             if reduceMotion {
                                 withAnimation(.default) {
                                     showNightingaleCouplet = false
@@ -431,6 +434,7 @@ struct GardenView: View {
         let separated = findNonOverlappingSpot(near: safePoint, screenSize: size)
         createLilyPad(at: separated)
         createWaterRipple(at: location)
+        audio.playSFX(.waterDrop)
         petalBurst += 1
         bobNearbyPads(tapLocation: normalized)
         hintStore.markPoolTapped()
@@ -638,10 +642,12 @@ struct GardenView: View {
 
         pads[index].isLotus = true
         pads[index].glowIntensity = 1.0
+        audio.playSFX(.lotusBloom)
 
         if let poem = pads[index].storedPoem {
             currentPoem = poem
             revealedPoemsStore.revealPoem(poem)
+            audio.playSFX(.poemReveal)
 
             if reduceMotion {
                 withAnimation(.default) {
@@ -677,6 +683,8 @@ struct GardenView: View {
     // MARK: - Nightingale
 
     private func nightingaleFlyIn() {
+        audio.playSFX(.wingFlutter)
+
         // Advance to next perch
         nightingalePerchIndex = (nightingalePerchIndex + 1) % nightingalePerchPositions.count
         let destination = nightingalePerchPositions[nightingalePerchIndex]
@@ -727,6 +735,7 @@ struct GardenView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
                 nightingaleIsPerched = true
                 petalBurst += 1  // landing burst
+                audio.playSFX(.nightingaleChirp)
             }
         }
     }
@@ -737,6 +746,8 @@ struct GardenView: View {
               !showNightingaleCouplet else { return }
 
         hintStore.markNightingaleTapped()
+        audio.playSFX(.nightingaleChirp)
+        audio.playSFX(.wingFlutter)
         nightingaleIsPerched = false
 
         let startPos = nightingalePosition
@@ -809,6 +820,7 @@ struct GardenView: View {
     }
 
     private func triggerNightingaleApproachHint() {
+        audio.playSFX(.whisperTone)
         showApproachFeather = true
         featherFallProgress = 0
         featherOpacity = 0
@@ -965,6 +977,7 @@ struct GardenView: View {
     }
 
     private func nightingaleDismiss() {
+        audio.playSFX(.whisperTone)
         showNightingale = false
         nightingaleAppearOpacity = 0
         nightingaleIsPerched = true
@@ -986,6 +999,7 @@ struct GardenView: View {
 
 
     private func showBonusCouplet() {
+        audio.playSFX(.poemReveal)
         let couplet = NightingaleCouplets.couplets[nightingaleCoupletIndex % NightingaleCouplets.couplets.count]
         nightingaleCoupletIndex += 1
         currentNightingaleCouplet = couplet

@@ -9,6 +9,7 @@ struct MainAppView: View {
     @EnvironmentObject var revealedPoemsStore: RevealedPoemsStore
     @Binding var showMainApp: Bool
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    private let audio = GardenAudioEngine.shared
 
     @State private var selectedTab = 0
     @State private var isTabTransitioning = false
@@ -116,6 +117,7 @@ struct MainAppView: View {
         windDirection = tab > selectedTab ? .rightToLeft : .leftToRight
         pendingTab = tab
         isTabTransitioning = true
+        audio.playSFX(.petalWhoosh)
 
         Task { @MainActor in
             // Petals sweep in
