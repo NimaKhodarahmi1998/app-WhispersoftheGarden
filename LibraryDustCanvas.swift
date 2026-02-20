@@ -69,8 +69,10 @@ private final class DustParticleData: ObservableObject, @unchecked Sendable {
         }
     }
 
-    func render(in context: inout GraphicsContext, size: CGSize) {
-        let color = Color(red: 1.0, green: 0.90, blue: 0.65)
+    func render(in context: inout GraphicsContext, size: CGSize, isDark: Bool) {
+        let color = isDark
+            ? Color(red: 1.0, green: 0.90, blue: 0.65)
+            : Color(red: 0.72, green: 0.58, blue: 0.32)
 
         for mote in motes {
             var ctx = context
@@ -101,6 +103,7 @@ private final class DustParticleData: ObservableObject, @unchecked Sendable {
 struct LibraryDustCanvas: View {
     var reduceMotion: Bool = false
     var isActive: Bool = true
+    var isDark: Bool = true
 
     @StateObject private var system = DustParticleData()
 
@@ -115,7 +118,7 @@ struct LibraryDustCanvas: View {
                         time: timeline.date.timeIntervalSinceReferenceDate,
                         size: size
                     )
-                    system.render(in: &context, size: size)
+                    system.render(in: &context, size: size, isDark: isDark)
                 }
             }
             .allowsHitTesting(false)

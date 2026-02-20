@@ -56,7 +56,7 @@ final class ParticleData: ObservableObject, @unchecked Sendable {
         guard !initialized else { return }
         initialized = true
 
-        for _ in 0..<40 {
+        for _ in 0..<25 {
             pollen.append(Self.makePollen(in: size, randomY: true))
         }
         for _ in 0..<3 {
@@ -74,8 +74,8 @@ final class ParticleData: ObservableObject, @unchecked Sendable {
         for _ in 0..<min(newBursts * 2, 8) {
             petals.append(Self.makePetal(in: size))
         }
-        if petals.count > 12 {
-            petals.removeFirst(petals.count - 12)
+        if petals.count > 8 {
+            petals.removeFirst(petals.count - 8)
         }
     }
 

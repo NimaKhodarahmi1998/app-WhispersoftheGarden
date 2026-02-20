@@ -4,7 +4,7 @@
 //
 //  Bonus Hafez couplets about the nightingale and rose.
 //  Separate from PoemLibrary — does not interfere with
-//  the main 9-poem progression. Uses fixed UUIDs for persistence.
+//  the main 12-poem progression. Uses fixed UUIDs for persistence.
 //
 
 import Foundation
@@ -74,6 +74,51 @@ struct NightingaleCouplets {
             english: "Glad tidings — the days of sorrow shall not last.\nAs it did not remain so, neither shall this.",
             culturalNote: "The second line is the key: neither sorrow nor joy lasts. For Hafez, that's liberation.",
             reflection: "This too shall pass — the grief, the joy, all of it. Let that free you instead of frightening you."
+        ),
+
+        Poem(
+            id: UUID(uuidString: "B0B00000-0000-0000-0000-000000000008")!,
+            poet: "Hafez",
+            persian: "اگر آن ترک شیرازی به دست آرد دل ما را\nبه خال هندویش بخشم سمرقند و بخارا را",
+            english: "If that Shirazi Turk would take my heart in hand,\nfor the dark mole on that cheek I'd give Samarkand and Bukhara.",
+            culturalNote: "The most famous opening in Persian poetry. Legend says Tamerlane summoned Hafez and demanded to know how he dared give away the conqueror's greatest cities for a mole. Hafez replied: 'It is through such generosity, Sire, that I have fallen into such poverty.'",
+            reflection: "Love makes you reckless with everything the world considers valuable. And that recklessness might be the most honest thing about you."
+        ),
+
+        Poem(
+            id: UUID(uuidString: "B0B00000-0000-0000-0000-000000000009")!,
+            poet: "Hafez",
+            persian: "بیا که قصر امل سخت سست بنیاد است\nبیار باده که بنیاد عمر بر باد است",
+            english: "Come, for the castle of hope stands on weak foundations —\nbring wine, for the foundation of life is wind.",
+            culturalNote: "Hafez pairs architectural imagery with impermanence. The 'castle of hope' is every plan you make assuming tomorrow is guaranteed.",
+            reflection: "Stop building castles in a future that doesn't exist yet. The wine is here. The friend is here. What are you waiting for?"
+        ),
+
+        Poem(
+            id: UUID(uuidString: "B0B00000-0000-0000-0000-000000000010")!,
+            poet: "Hafez",
+            persian: "نیست بر لوح دلم جز الف قامت یار\nچه کنم حرف دگر یاد نداد استادم",
+            english: "On the tablet of my heart is nothing but the alif of the beloved's form —\nwhat can I do? My teacher taught me no other letter.",
+            culturalNote: "Alif is the first letter of Persian script — a single vertical stroke. Hafez says his entire education reduced to one shape: the beloved standing upright.",
+            reflection: "When something truly claims you, it simplifies everything. All the complexity you thought mattered dissolves into one clear note."
+        ),
+
+        Poem(
+            id: UUID(uuidString: "B0B00000-0000-0000-0000-000000000012")!,
+            poet: "Hafez",
+            persian: "الا یا ایها الساقی ادر کأساً و ناولها\nکه عشق آسان نمود اول ولی افتاد مشکل‌ها",
+            english: "O cupbearer, pass the cup and hand it round —\nfor love seemed easy at first, but then the troubles came.",
+            culturalNote: "The opening of Hafez's Divan. The shift from Arabic to Persian in mid-couplet mirrors the shift from expectation to reality. Every reader remembers the moment love stopped being simple.",
+            reflection: "Everyone signs up for the easy part. The question is whether you stay when the troubles come — and they always come."
+        ),
+
+        Poem(
+            id: UUID(uuidString: "B0B00000-0000-0000-0000-000000000013")!,
+            poet: "Hafez",
+            persian: "مزرع سبز فلک دیدم و داس مه نو\nیادم از کشته‌ی خویش آمد و هنگام درو",
+            english: "I saw the green fields of the sky and the sickle of the new moon —\nI remembered my own harvest, and the time of reaping.",
+            culturalNote: "Hafez turns an agricultural metaphor into an existential one. The new moon is a cosmic sickle — and your life is what's planted in the field.",
+            reflection: "Everything you've sown is growing. The harvest is coming whether you're ready or not. What have you been planting?"
         )
     ]
 }

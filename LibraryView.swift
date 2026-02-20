@@ -57,20 +57,25 @@ struct LibraryView: View {
     @EnvironmentObject var revealedPoemsStore: RevealedPoemsStore
     @Binding var showMainApp: Bool
     var isActive: Bool = true  // pause particles when off-screen
+    private let audio = GardenAudioEngine.shared
     @State private var searchText = ""
+    @State private var debouncedSearch = ""
+    @State private var searchDebounceTask: Task<Void, Never>?
     @State private var selectedPoet: String? = nil
     @State private var showFavoritesOnly = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     // Dynamic Type scaled font sizes
-    @ScaledMetric(relativeTo: .caption2) private var tinySize: CGFloat = 9
-    @ScaledMetric(relativeTo: .caption) private var smallSize: CGFloat = 10
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11
-    @ScaledMetric(relativeTo: .footnote) private var footnoteSize: CGFloat = 12
-    @ScaledMetric(relativeTo: .footnote) private var chipSize: CGFloat = 13
-    @ScaledMetric(relativeTo: .subheadline) private var bodySmallSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .body) private var bodySize: CGFloat = 16
-    @ScaledMetric(relativeTo: .headline) private var headlineSize: CGFloat = 18
+    @ScaledMetric(relativeTo: .caption2) private var tinySize: CGFloat = 11
+    @ScaledMetric(relativeTo: .caption) private var smallSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .footnote) private var footnoteSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var chipSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .subheadline) private var bodySmallSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .body) private var bodySize: CGFloat = 18
+    @ScaledMetric(relativeTo: .headline) private var headlineSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .body) private var tileMinHeight: CGFloat = 190
 
     // All poems (revealed + locked)
     private var allPoems: [Poem] { PoemLibrary.poems }
@@ -88,17 +93,17 @@ struct LibraryView: View {
             result = result.filter { revealedPoemsStore.isFavorite($0) }
         }
 
-        if !searchText.isEmpty {
+        if !debouncedSearch.isEmpty {
             result = result.filter { poem in
                 if revealedPoemsStore.isRevealed(poem) {
-                    return poem.poet.localizedCaseInsensitiveContains(searchText) ||
-                           poem.persian.localizedCaseInsensitiveContains(searchText) ||
-                           poem.english.localizedCaseInsensitiveContains(searchText) ||
-                           poem.culturalNote.localizedCaseInsensitiveContains(searchText) ||
-                           poem.reflection.localizedCaseInsensitiveContains(searchText)
+                    return poem.poet.localizedCaseInsensitiveContains(debouncedSearch) ||
+                           poem.persian.localizedCaseInsensitiveContains(debouncedSearch) ||
+                           poem.english.localizedCaseInsensitiveContains(debouncedSearch) ||
+                           poem.culturalNote.localizedCaseInsensitiveContains(debouncedSearch) ||
+                           poem.reflection.localizedCaseInsensitiveContains(debouncedSearch)
                 } else {
                     // Locked: only match poet name
-                    return poem.poet.localizedCaseInsensitiveContains(searchText)
+                    return poem.poet.localizedCaseInsensitiveContains(debouncedSearch)
                 }
             }
         }
@@ -117,16 +122,16 @@ struct LibraryView: View {
             result = result.filter { revealedPoemsStore.isFavorite($0) }
         }
 
-        if !searchText.isEmpty {
+        if !debouncedSearch.isEmpty {
             result = result.filter { poem in
                 if revealedPoemsStore.revealedNightingaleIDs.contains(poem.id) {
-                    return poem.poet.localizedCaseInsensitiveContains(searchText) ||
-                           poem.persian.localizedCaseInsensitiveContains(searchText) ||
-                           poem.english.localizedCaseInsensitiveContains(searchText) ||
-                           poem.culturalNote.localizedCaseInsensitiveContains(searchText) ||
-                           poem.reflection.localizedCaseInsensitiveContains(searchText)
+                    return poem.poet.localizedCaseInsensitiveContains(debouncedSearch) ||
+                           poem.persian.localizedCaseInsensitiveContains(debouncedSearch) ||
+                           poem.english.localizedCaseInsensitiveContains(debouncedSearch) ||
+                           poem.culturalNote.localizedCaseInsensitiveContains(debouncedSearch) ||
+                           poem.reflection.localizedCaseInsensitiveContains(debouncedSearch)
                 } else {
-                    return poem.poet.localizedCaseInsensitiveContains(searchText)
+                    return poem.poet.localizedCaseInsensitiveContains(debouncedSearch)
                 }
             }
         }
@@ -152,11 +157,11 @@ struct LibraryView: View {
             bios = bios.filter { $0.id == poet }
         }
 
-        if !searchText.isEmpty {
+        if !debouncedSearch.isEmpty {
             bios = bios.filter {
-                $0.name.localizedCaseInsensitiveContains(searchText) ||
-                $0.homeland.localizedCaseInsensitiveContains(searchText) ||
-                $0.bio.localizedCaseInsensitiveContains(searchText)
+                $0.name.localizedCaseInsensitiveContains(debouncedSearch) ||
+                $0.homeland.localizedCaseInsensitiveContains(debouncedSearch) ||
+                $0.bio.localizedCaseInsensitiveContains(debouncedSearch)
             }
         }
 
@@ -183,12 +188,43 @@ struct LibraryView: View {
         return true
     }
 
-    // App palette
-    private let bgBase = Color(red: 0.04, green: 0.06, blue: 0.14)
-    private let cardColor = Color(red: 0.95, green: 0.88, blue: 0.7).opacity(0.06)
-    private let rose = Color(red: 0.9, green: 0.4, blue: 0.5)
-    private let gold = Color(red: 1.0, green: 0.85, blue: 0.55)
-    private let highlight = Color(red: 1.0, green: 0.75, blue: 0.2)
+    // MARK: - Adaptive Color Palette
+
+    private var bgBase: Color {
+        colorScheme == .dark
+            ? Color(red: 0.04, green: 0.06, blue: 0.14)
+            : Color(red: 0.96, green: 0.93, blue: 0.87)
+    }
+    private var cardColor: Color {
+        colorScheme == .dark
+            ? Color(red: 0.95, green: 0.88, blue: 0.7).opacity(0.06)
+            : Color(red: 0.91, green: 0.86, blue: 0.78).opacity(0.45)
+    }
+    private var rose: Color {
+        colorScheme == .dark
+            ? Color(red: 0.9, green: 0.4, blue: 0.5)
+            : Color(red: 0.75, green: 0.28, blue: 0.38)
+    }
+    private var gold: Color {
+        colorScheme == .dark
+            ? Color(red: 1.0, green: 0.85, blue: 0.55)
+            : Color(red: 0.72, green: 0.56, blue: 0.18)
+    }
+    private var highlight: Color {
+        colorScheme == .dark
+            ? Color(red: 1.0, green: 0.75, blue: 0.2)
+            : Color(red: 0.78, green: 0.52, blue: 0.08)
+    }
+
+    // Semantic text colors
+    private var textPrimary: Color {
+        colorScheme == .dark ? .white : Color(red: 0.15, green: 0.12, blue: 0.08)
+    }
+    private var textSecondary: Color { textPrimary.opacity(0.6) }
+    private var textTertiary: Color { textPrimary.opacity(0.35) }
+    private var surfaceFill: Color { textPrimary.opacity(0.06) }
+    private var surfaceFillSubtle: Color { textPrimary.opacity(0.03) }
+    private var trackFill: Color { textPrimary.opacity(0.08) }
 
     private let tileColumns = [
         GridItem(.flexible(), spacing: 12),
@@ -225,18 +261,25 @@ struct LibraryView: View {
             bgBase.ignoresSafeArea()
 
             RadialGradient(
-                colors: [Color(red: 0.18, green: 0.14, blue: 0.08).opacity(0.4), .clear],
+                colors: [
+                    colorScheme == .dark
+                        ? Color(red: 0.18, green: 0.14, blue: 0.08).opacity(0.4)
+                        : Color(red: 0.88, green: 0.82, blue: 0.72).opacity(0.3),
+                    .clear
+                ],
                 center: .init(x: 0.5, y: 0.1),
                 startRadius: 20,
                 endRadius: 500
             )
             .ignoresSafeArea()
 
-            Color(red: 1.0, green: 0.85, blue: 0.55).opacity(0.03)
+            (colorScheme == .dark
+                ? Color(red: 1.0, green: 0.85, blue: 0.55).opacity(0.03)
+                : Color(red: 0.88, green: 0.82, blue: 0.72).opacity(0.02))
                 .ignoresSafeArea()
 
             // Dust particles — paused when library is off-screen
-            LibraryDustCanvas(reduceMotion: reduceMotion, isActive: isActive)
+            LibraryDustCanvas(reduceMotion: reduceMotion, isActive: isActive, isDark: colorScheme == .dark)
 
             if revealedPoemsStore.getRevealedPoems().isEmpty && revealedPoemsStore.getRevealedNightingaleCouplets().isEmpty {
                 emptyStateView
@@ -275,6 +318,7 @@ struct LibraryView: View {
                                             poemTile(poem)
                                         }
                                         .buttonStyle(.plain)
+                                        .simultaneousGesture(TapGesture().onEnded { audio.playSFX(.gentleTap) })
                                         .accessibilityElement(children: .ignore)
                                         .accessibilityLabel("\(poem.poet). \(poem.english)")
                                         .accessibilityHint("Double tap to view full poem")
@@ -309,6 +353,7 @@ struct LibraryView: View {
                                             poemTile(couplet)
                                         }
                                         .buttonStyle(.plain)
+                                        .simultaneousGesture(TapGesture().onEnded { audio.playSFX(.gentleTap) })
                                         .accessibilityElement(children: .ignore)
                                         .accessibilityLabel("\(couplet.poet). \(couplet.english)")
                                         .accessibilityHint("Double tap to view full couplet")
@@ -341,9 +386,21 @@ struct LibraryView: View {
         .navigationTitle("Library")
         .navigationBarTitleDisplayMode(.large)
         .searchable(text: $searchText, prompt: "Search poems...")
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarColorScheme(colorScheme == .dark ? .dark : .light, for: .navigationBar)
         .toolbarBackground(bgBase, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .onChange(of: searchText) { newValue in
+            searchDebounceTask?.cancel()
+            if newValue.isEmpty {
+                debouncedSearch = ""
+            } else {
+                searchDebounceTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
+                    guard !Task.isCancelled else { return }
+                    debouncedSearch = newValue
+                }
+            }
+        }
     }
 
     // MARK: - Poem of the Day
@@ -366,7 +423,7 @@ struct LibraryView: View {
                 Text(poem.english)
                     .font(.system(size: bodySize, weight: .medium, design: .serif))
                     .italic()
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(textPrimary.opacity(0.9))
                     .multilineTextAlignment(.leading)
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -381,10 +438,11 @@ struct LibraryView: View {
                 RoundedRectangle(cornerRadius: 14)
                     .fill(
                         LinearGradient(
-                            colors: [
-                                Color(red: 0.25, green: 0.20, blue: 0.08).opacity(0.5),
-                                Color(red: 0.15, green: 0.12, blue: 0.05).opacity(0.3)
-                            ],
+                            colors: colorScheme == .dark
+                                ? [Color(red: 0.25, green: 0.20, blue: 0.08).opacity(0.5),
+                                   Color(red: 0.15, green: 0.12, blue: 0.05).opacity(0.3)]
+                                : [Color(red: 0.82, green: 0.75, blue: 0.60).opacity(0.4),
+                                   Color(red: 0.88, green: 0.83, blue: 0.72).opacity(0.3)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -398,6 +456,7 @@ struct LibraryView: View {
         .shadow(color: gold.opacity(0.12), radius: 25)
         .buttonStyle(.plain)
         .padding(.top, 4)
+        .simultaneousGesture(TapGesture().onEnded { audio.playSFX(.gentleTap) })
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Poem of the Day by \(poem.poet). \(poem.english)")
     }
@@ -423,17 +482,18 @@ struct LibraryView: View {
             }
 
             Button {
+                audio.playSFX(.gentleTap)
                 withAnimation(.easeInOut(duration: 0.2)) {
                     showFavoritesOnly.toggle()
                 }
             } label: {
                 Image(systemName: showFavoritesOnly ? "heart.fill" : "heart")
                     .font(.system(size: bodySize))
-                    .foregroundStyle(showFavoritesOnly ? rose : .white.opacity(0.5))
+                    .foregroundStyle(showFavoritesOnly ? rose : textPrimary.opacity(0.5))
                     .frame(width: 36, height: 32)
                     .background(
                         Capsule()
-                            .fill(showFavoritesOnly ? rose.opacity(0.2) : Color.white.opacity(0.06))
+                            .fill(showFavoritesOnly ? rose.opacity(0.2) : surfaceFill)
                     )
             }
             .accessibilityLabel(showFavoritesOnly ? "Show all poems" : "Show favorites only")
@@ -443,15 +503,18 @@ struct LibraryView: View {
 
     private func filterChip(_ label: String, isSelected: Bool, selectedColor: Color? = nil, action: @escaping () -> Void) -> some View {
         let chipColor = selectedColor ?? gold
-        return Button(action: action) {
+        return Button {
+            audio.playSFX(.gentleTap)
+            action()
+        } label: {
             Text(label)
                 .font(.system(size: chipSize, weight: .medium, design: .serif))
-                .foregroundStyle(isSelected ? .black : .white.opacity(0.6))
+                .foregroundStyle(isSelected ? (colorScheme == .dark ? .black : .white) : textSecondary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 6)
                 .background(
                     Capsule()
-                        .fill(isSelected ? chipColor : Color.white.opacity(0.06))
+                        .fill(isSelected ? chipColor : surfaceFill)
                 )
         }
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
@@ -467,11 +530,11 @@ struct LibraryView: View {
 
             Text("No favorites yet")
                 .font(.system(size: bodySize, weight: .medium, design: .serif))
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(textSecondary)
 
             Text("Tap the heart on any poem to save it.")
                 .font(.system(size: chipSize, design: .serif))
-                .foregroundStyle(.white.opacity(0.35))
+                .foregroundStyle(textTertiary)
         }
         .padding(.vertical, 40)
         .frame(maxWidth: .infinity)
@@ -538,20 +601,20 @@ struct LibraryView: View {
 
                     Text(subtitle)
                         .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(textTertiary)
                 }
 
                 Spacer()
 
                 Text("\(count) of \(total)")
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(textPrimary.opacity(0.5))
             }
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(Color.white.opacity(0.08))
+                        .fill(trackFill)
                         .frame(height: 3)
 
                     Capsule()
@@ -579,19 +642,19 @@ struct LibraryView: View {
 
     /// Returns (label, snippet) when the search matched a field not visible in the tile.
     private func hiddenMatchContext(for poem: Poem) -> (label: String, snippet: String)? {
-        guard !searchText.isEmpty else { return nil }
+        guard !debouncedSearch.isEmpty else { return nil }
 
         let visibleMatch =
-            poem.poet.localizedCaseInsensitiveContains(searchText) ||
-            poem.english.localizedCaseInsensitiveContains(searchText) ||
-            poem.persian.localizedCaseInsensitiveContains(searchText)
+            poem.poet.localizedCaseInsensitiveContains(debouncedSearch) ||
+            poem.english.localizedCaseInsensitiveContains(debouncedSearch) ||
+            poem.persian.localizedCaseInsensitiveContains(debouncedSearch)
         if visibleMatch { return nil }
 
-        if poem.culturalNote.localizedCaseInsensitiveContains(searchText) {
-            return ("Cultural Note", snippetAround(searchText, in: poem.culturalNote))
+        if poem.culturalNote.localizedCaseInsensitiveContains(debouncedSearch) {
+            return ("Cultural Note", snippetAround(debouncedSearch, in: poem.culturalNote))
         }
-        if poem.reflection.localizedCaseInsensitiveContains(searchText) {
-            return ("Reflection", snippetAround(searchText, in: poem.reflection))
+        if poem.reflection.localizedCaseInsensitiveContains(debouncedSearch) {
+            return ("Reflection", snippetAround(debouncedSearch, in: poem.reflection))
         }
         return nil
     }
@@ -617,7 +680,7 @@ struct LibraryView: View {
 
     /// Returns a `Text` with search matches highlighted in a warm amber.
     private func highlighted(_ text: String, baseColor: Color) -> Text {
-        guard !searchText.isEmpty else {
+        guard !debouncedSearch.isEmpty else {
             return Text(text).foregroundColor(baseColor)
         }
 
@@ -625,7 +688,7 @@ struct LibraryView: View {
         var cursor = text.startIndex
 
         while cursor < text.endIndex,
-              let range = text.range(of: searchText, options: .caseInsensitive,
+              let range = text.range(of: debouncedSearch, options: .caseInsensitive,
                                      range: cursor..<text.endIndex) {
             if cursor < range.lowerBound {
                 result = result + Text(text[cursor..<range.lowerBound])
@@ -654,17 +717,18 @@ struct LibraryView: View {
                 .textCase(.uppercase)
                 .tracking(1.5)
 
-            highlighted(poem.english, baseColor: .white)
+            highlighted(poem.english, baseColor: textPrimary)
                 .font(.system(size: bodySmallSize, weight: .medium, design: .serif))
                 .italic()
                 .multilineTextAlignment(.center)
+                .lineLimit(3)
                 .minimumScaleFactor(0.8)
 
             Circle()
                 .fill(accent.opacity(0.35))
                 .frame(width: 4, height: 4)
 
-            highlighted(poem.persian, baseColor: .white.opacity(0.45))
+            highlighted(poem.persian, baseColor: textPrimary.opacity(0.45))
                 .font(.system(size: captionSize, weight: .medium, design: .serif))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -678,7 +742,7 @@ struct LibraryView: View {
                         .foregroundStyle(gold.opacity(0.5))
                         .textCase(.uppercase)
 
-                    highlighted(match.snippet, baseColor: .white.opacity(0.35))
+                    highlighted(match.snippet, baseColor: textTertiary)
                         .font(.system(size: smallSize, design: .serif))
                         .italic()
                         .multilineTextAlignment(.center)
@@ -696,7 +760,7 @@ struct LibraryView: View {
             }
         }
         .padding(14)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, minHeight: tileMinHeight)
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 14)
@@ -743,7 +807,7 @@ struct LibraryView: View {
 
                     Text("The voices behind the verses")
                         .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(textTertiary)
                 }
 
                 Spacer()
@@ -775,15 +839,15 @@ struct LibraryView: View {
                     HStack(spacing: 8) {
                         Text(poet.years)
                         Text("\u{00B7}")
-                        highlighted(poet.homeland, baseColor: .white.opacity(0.4))
+                        highlighted(poet.homeland, baseColor: textPrimary.opacity(0.4))
                     }
                     .font(.system(size: footnoteSize, design: .serif))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(textPrimary.opacity(0.4))
                 }
                 Spacer()
             }
 
-            highlighted(poet.bio, baseColor: .white.opacity(0.75))
+            highlighted(poet.bio, baseColor: textPrimary.opacity(0.75))
                 .font(.system(size: bodySmallSize, design: .serif))
                 .lineSpacing(4)
         }
@@ -821,12 +885,12 @@ struct LibraryView: View {
                 Text("No Poems Yet")
                     .font(.title3)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .foregroundStyle(textPrimary.opacity(0.8))
 
                 Text("Tap the pool in your garden\nto reveal hidden verses")
                     .font(.subheadline)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(textPrimary.opacity(0.4))
             }
 
             Spacer()
@@ -842,11 +906,17 @@ private struct LockedPoemTileView: View {
     let poet: String
     let accent: Color
 
-    @ScaledMetric(relativeTo: .caption) private var smallSize: CGFloat = 10
-    @ScaledMetric(relativeTo: .footnote) private var footnoteSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var smallSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .footnote) private var footnoteSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .body) private var tileMinHeight: CGFloat = 190
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var shimmerPhase: CGFloat = -0.5
+
+    private var textPrimary: Color {
+        colorScheme == .dark ? .white : Color(red: 0.15, green: 0.12, blue: 0.08)
+    }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -863,13 +933,13 @@ private struct LockedPoemTileView: View {
             Text("A verse awaits\u{2026}")
                 .font(.system(size: footnoteSize, weight: .medium, design: .serif))
                 .italic()
-                .foregroundStyle(.white.opacity(0.15))
+                .foregroundStyle(textPrimary.opacity(0.15))
         }
         .padding(14)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, minHeight: tileMinHeight)
         .background(
             RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white.opacity(0.03))
+                .fill(textPrimary.opacity(colorScheme == .dark ? 0.03 : 0.04))
                 .overlay(
                     // Slow diagonal shimmer — just a gradient UV shift, no blur
                     LinearGradient(

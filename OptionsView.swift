@@ -14,10 +14,10 @@ struct OptionsView: View {
 
     @ScaledMetric(relativeTo: .body) private var settingLabelSize: CGFloat = 17
 
-    private let gold = Color(red: 1.0, green: 0.92, blue: 0.65)
-    private let darkGold = Color(red: 0.92, green: 0.78, blue: 0.48)
-    private let deepBlue = Color(red: 0.03, green: 0.08, blue: 0.18)
-    private let navyBg = Color(red: 0/255, green: 32/255, blue: 72/255)
+    private let gold = Color.gardenGold
+    private let darkGold = Color.gardenDarkGold
+    private let deepBlue = Color.gardenDeepBlue
+    private let navyBg = Color.gardenNavy
 
     var body: some View {
         ZStack {
@@ -60,6 +60,21 @@ struct OptionsView: View {
                                 .accessibilityValue("\(Int(audio.musicVolume * 100)) percent")
                         }
                     }
+
+                    Divider()
+                        .background(gold.opacity(0.2))
+
+                    // Sound effects toggle
+                    settingRow(
+                        icon: "waveform",
+                        label: "Sounds",
+                        accessibilityLabel: "Sound Effects"
+                    ) {
+                        Toggle("", isOn: $audio.isSFXEnabled)
+                            .labelsHidden()
+                            .tint(darkGold)
+                            .accessibilityLabel("Sound Effects")
+                    }
                 }
                 .padding(.vertical, 8)
                 .background(
@@ -71,6 +86,7 @@ struct OptionsView: View {
                 Spacer()
 
                 Button {
+                    audio.playSFX(.gentleTap)
                     showOptions = false
                 } label: {
                     Text("Back to Menu")

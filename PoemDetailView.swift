@@ -10,6 +10,7 @@ struct PoemDetailView: View {
     @State var currentIndex: Int
     @EnvironmentObject var revealedPoemsStore: RevealedPoemsStore
     @State private var showShareSheet = false
+    @Environment(\.colorScheme) private var colorScheme
 
     @ScaledMetric(relativeTo: .caption) private var poetNameSize: CGFloat = 14
     @ScaledMetric(relativeTo: .title2) private var translationSize: CGFloat = 22
@@ -17,9 +18,26 @@ struct PoemDetailView: View {
 
     private var poem: Poem { poems[currentIndex] }
 
-    private let bgColor = Color(red: 0.02, green: 0.08, blue: 0.18)
-    private let rose = Color(red: 0.9, green: 0.4, blue: 0.5)
-    private let gold = Color(red: 1.0, green: 0.85, blue: 0.55)
+    // MARK: - Adaptive Color Palette
+
+    private var bgColor: Color {
+        colorScheme == .dark
+            ? Color(red: 0.02, green: 0.08, blue: 0.18)
+            : Color(red: 0.96, green: 0.93, blue: 0.87)
+    }
+    private var rose: Color {
+        colorScheme == .dark
+            ? Color(red: 0.9, green: 0.4, blue: 0.5)
+            : Color(red: 0.75, green: 0.28, blue: 0.38)
+    }
+    private var gold: Color {
+        colorScheme == .dark
+            ? Color(red: 1.0, green: 0.85, blue: 0.55)
+            : Color(red: 0.72, green: 0.56, blue: 0.18)
+    }
+    private var textPrimary: Color {
+        colorScheme == .dark ? .white : Color(red: 0.15, green: 0.12, blue: 0.08)
+    }
 
     /// Convenience init for single poem
     init(poem: Poem) {
@@ -59,7 +77,7 @@ struct PoemDetailView: View {
         }
         .navigationTitle("Poem")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarColorScheme(colorScheme == .dark ? .dark : .light, for: .navigationBar)
         .toolbarBackground(bgColor, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
@@ -68,7 +86,7 @@ struct PoemDetailView: View {
                     revealedPoemsStore.toggleFavorite(poem)
                 } label: {
                     Image(systemName: revealedPoemsStore.isFavorite(poem) ? "heart.fill" : "heart")
-                        .foregroundStyle(revealedPoemsStore.isFavorite(poem) ? rose : .white.opacity(0.7))
+                        .foregroundStyle(revealedPoemsStore.isFavorite(poem) ? rose : textPrimary.opacity(0.7))
                 }
                 .accessibilityLabel(revealedPoemsStore.isFavorite(poem) ? "Remove from favorites" : "Add to favorites")
 
@@ -76,7 +94,7 @@ struct PoemDetailView: View {
                     showShareSheet = true
                 } label: {
                     Image(systemName: "square.and.arrow.up")
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(textPrimary.opacity(0.7))
                 }
                 .accessibilityLabel("Share poem")
             }
@@ -107,7 +125,7 @@ struct PoemDetailView: View {
                     Text("Translation")
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(textPrimary.opacity(0.35))
                         .textCase(.uppercase)
                         .tracking(1.5)
 
@@ -133,18 +151,18 @@ struct PoemDetailView: View {
                     Text("Original")
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(textPrimary.opacity(0.35))
                         .textCase(.uppercase)
                         .tracking(1.5)
 
                     Text(p.persian)
                         .font(.system(size: persianSize, weight: .medium, design: .serif))
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(textPrimary.opacity(0.85))
                 }
                 .frame(maxWidth: .infinity)
                 .accessibilityElement(children: .combine)
-                .accessibilityHidden(true)
+                .accessibilityLabel("Original Persian: \(p.persian)")
 
                 // Cultural Note
                 VStack(alignment: .leading, spacing: 8) {
@@ -157,14 +175,14 @@ struct PoemDetailView: View {
 
                     Text(p.culturalNote)
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(textPrimary.opacity(0.7))
                         .lineSpacing(3)
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.white.opacity(0.05))
+                        .fill(textPrimary.opacity(0.05))
                 )
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Cultural Context: \(p.culturalNote)")
@@ -180,7 +198,7 @@ struct PoemDetailView: View {
 
                     Text(p.reflection)
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(textPrimary.opacity(0.7))
                         .lineSpacing(3)
                 }
                 .padding(16)
@@ -204,7 +222,7 @@ struct PoemDetailView: View {
         HStack(spacing: 6) {
             ForEach(0..<poems.count, id: \.self) { index in
                 Circle()
-                    .fill(index == currentIndex ? gold : .white.opacity(0.2))
+                    .fill(index == currentIndex ? gold : textPrimary.opacity(0.2))
                     .frame(width: index == currentIndex ? 7 : 5,
                            height: index == currentIndex ? 7 : 5)
                     .animation(.easeInOut(duration: 0.2), value: currentIndex)

@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AVKit
 import AVFoundation
 
 // MARK: - Landing Particle System
@@ -30,7 +29,7 @@ private final class LandingParticleData: ObservableObject, @unchecked Sendable {
     private func setup(size: CGSize) {
         guard !initialized else { return }
         initialized = true
-        for _ in 0..<25 {
+        for _ in 0..<18 {
             motes.append(Self.makeMote(in: size, randomY: true))
         }
     }
@@ -220,6 +219,7 @@ struct LandingPage: View {
     @Binding var showOptions: Bool
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    private let audio = GardenAudioEngine.shared
 
     // Dynamic Type scaled base sizes (phone values — iPad uses multiplier)
     @ScaledMetric(relativeTo: .title3) private var headingBase: CGFloat = 19
@@ -257,7 +257,7 @@ struct LandingPage: View {
 
                 VStack(spacing: 0) {
                     // Video at the top with a long fade into the background
-                    LoopingVideoPlayer(videoName: "Heading3", videoExt: "MOV")
+                    OneShotVideoPlayer(videoName: "Heading3", videoExt: "MOV")
                         .frame(maxWidth: .infinity)
                         .frame(height: videoHeight)
                         .clipped()
@@ -305,6 +305,7 @@ struct LandingPage: View {
 
                     // Enter Your Garden button
                     Button {
+                        audio.playSFX(.gentleTap)
                         showMainApp = true
                     } label: {
                         ZStack {
@@ -343,6 +344,7 @@ struct LandingPage: View {
 
                     // Options button
                     Button {
+                        audio.playSFX(.gentleTap)
                         showOptions = true
                     } label: {
                         ZStack {
@@ -425,7 +427,7 @@ struct LandingPage: View {
         }
     }
 
-    struct LoopingVideoPlayer: UIViewRepresentable {
+    struct OneShotVideoPlayer: UIViewRepresentable {
         let videoName: String
         let videoExt: String
 
@@ -440,7 +442,6 @@ struct LandingPage: View {
         class PlayerView: UIView {
             private var player: AVPlayer?
             private var playerLayer: AVPlayerLayer?
-            private var loopObserver: NSObjectProtocol?
 
             init(videoName: String, videoExt: String) {
                 super.init(frame: .zero)
@@ -461,16 +462,6 @@ struct LandingPage: View {
 
                 backgroundColor = UIColor(red: 10/255, green: 45/255, blue: 90/255, alpha: 1)
 
-                // Loop seamlessly
-                loopObserver = NotificationCenter.default.addObserver(
-                    forName: .AVPlayerItemDidPlayToEndTime,
-                    object: player.currentItem,
-                    queue: .main
-                ) { [weak player] _ in
-                    player?.seek(to: .zero)
-                    player?.play()
-                }
-
                 player.isMuted = true
                 player.play()
             }
@@ -480,10 +471,6 @@ struct LandingPage: View {
             }
 
             override func removeFromSuperview() {
-                if let observer = loopObserver {
-                    NotificationCenter.default.removeObserver(observer)
-                    loopObserver = nil
-                }
                 player?.pause()
                 playerLayer?.removeFromSuperlayer()
                 player = nil

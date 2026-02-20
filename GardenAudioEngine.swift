@@ -2,7 +2,7 @@
 //  GardenAudioEngine.swift
 //  WhispersoftheGardenApp
 //
-//  Central audio engine: ambient santur synthesis.
+//  Central audio engine: ambient santur synthesis + SFX playback.
 //  Singleton accessed from SwiftUI views via GardenAudioEngine.shared.
 //
 
@@ -33,6 +33,12 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
         }
     }
 
+    @Published var isSFXEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isSFXEnabled, forKey: "audio_sfxEnabled")
+        }
+    }
+
     // MARK: - Audio Graph
 
     private let engine = AVAudioEngine()
@@ -40,6 +46,12 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
     private var santurSource: AVAudioSourceNode?
 
     private let reverb = AVAudioUnitReverb()
+
+    // SFX playback: 3 player nodes round-robin through a shared mixer
+    private var sfxPlayers: [AVAudioPlayerNode] = []
+    private var sfxPlayerIndex = 0
+    private var monoFmt: AVAudioFormat?
+    private var cachedSampleRate: Double = 44100
 
     private var isEngineRunning = false
     private var isSetUp = false
@@ -55,9 +67,13 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
         if defaults.object(forKey: "audio_musicVolume") == nil {
             defaults.set(Float(0.5), forKey: "audio_musicVolume")
         }
+        if defaults.object(forKey: "audio_sfxEnabled") == nil {
+            defaults.set(true, forKey: "audio_sfxEnabled")
+        }
 
         self.isMusicEnabled = defaults.bool(forKey: "audio_musicEnabled")
         self.musicVolume = defaults.float(forKey: "audio_musicVolume")
+        self.isSFXEnabled = defaults.bool(forKey: "audio_sfxEnabled")
     }
 
     // MARK: - Lazy Setup (called once from startEngine)
@@ -85,6 +101,8 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
 
         // --- Build audio graph ---
         let monoFormat = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        monoFmt = monoFormat
+        cachedSampleRate = sampleRate
 
         let santurRef = santur!
         let sourceNode = AVAudioSourceNode(format: monoFormat) {
@@ -104,13 +122,34 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
         reverb.loadFactoryPreset(.largeHall)
         reverb.wetDryMix = 40
 
+        // SFX player nodes (3 for overlapping one-shot sounds)
+        // SFX gets its own sub-mixer at reduced volume so santur stays on top
+        let sfxMixer = AVAudioMixerNode()
+        engine.attach(sfxMixer)
+        sfxMixer.outputVolume = 0.35  // SFX is a subtle layer beneath the santur
+
+        for _ in 0..<3 {
+            let player = AVAudioPlayerNode()
+            sfxPlayers.append(player)
+            engine.attach(player)
+            engine.connect(player, to: sfxMixer, format: monoFormat)
+        }
+
+        let sourceMixer = AVAudioMixerNode()
+        engine.attach(sourceMixer)
+
         // Attach
         engine.attach(sourceNode)
         engine.attach(reverb)
 
-        // Connect — use explicit mono format everywhere to avoid silent mismatches
-        // Ambient: sourceNode → reverb → mainMixer
-        engine.connect(sourceNode, to: reverb, format: monoFormat)
+        // Connect — santur at full volume, SFX at reduced volume, both into reverb
+        // santurSource ─────────────────┐
+        // sfxPlayer 0  ──┐              │
+        // sfxPlayer 1  ──├── sfxMixer ──┤── sourceMixer ── reverb ── mainMixer
+        // sfxPlayer 2  ──┘              │
+        engine.connect(sourceNode, to: sourceMixer, format: monoFormat)
+        engine.connect(sfxMixer, to: sourceMixer, format: monoFormat)
+        engine.connect(sourceMixer, to: reverb, format: monoFormat)
         engine.connect(reverb, to: engine.mainMixerNode, format: monoFormat)
     }
 
@@ -171,5 +210,26 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
         }
     }
 
-    func playSFX(_ type: SFXType) { }
+    func playSFX(_ type: SFXType) {
+        guard isSFXEnabled, isEngineRunning, let fmt = monoFmt, !sfxPlayers.isEmpty else { return }
+
+        let samples = SFXBufferGen.generate(type, sampleRate: cachedSampleRate)
+        guard !samples.isEmpty,
+              let buffer = AVAudioPCMBuffer(
+                  pcmFormat: fmt,
+                  frameCapacity: AVAudioFrameCount(samples.count)),
+              let channelData = buffer.floatChannelData
+        else { return }
+
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        let dst = channelData[0]
+        for i in 0..<samples.count { dst[i] = samples[i] }
+
+        // Round-robin across player pool (allows overlapping sounds)
+        let player = sfxPlayers[sfxPlayerIndex]
+        sfxPlayerIndex = (sfxPlayerIndex + 1) % sfxPlayers.count
+        player.stop()
+        player.scheduleBuffer(buffer)
+        player.play()
+    }
 }

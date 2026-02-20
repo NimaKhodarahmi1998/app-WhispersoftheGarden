@@ -40,8 +40,20 @@ struct WaterRipple: Identifiable {
     var createdAt: Date
 }
 
-enum MovementStyle: CaseIterable {
+enum MovementStyle: String, CaseIterable, Codable {
     case gentle, wavy, circular, zigzag, stillness
+}
+
+// MARK: - Garden Persistence
+
+private struct SavedPad: Codable {
+    let anchorX: CGFloat
+    let anchorY: CGFloat
+    let isLotus: Bool
+    let movementStyle: MovementStyle
+    let phase: CGFloat
+    let speed: CGFloat
+    let storedPoemID: String?  // UUID string for lookup
 }
 
 struct GardenView: View {
@@ -383,7 +395,9 @@ struct GardenView: View {
         }
         .ignoresSafeArea()
         .onAppear {
-            for _ in 0..<6 {
+            loadGardenState()
+
+            for _ in 0..<4 {
                 spawnFirefly(screenSize: UIScreen.main.bounds.size, randomY: true)
             }
 
@@ -499,12 +513,14 @@ struct GardenView: View {
         createLilyPad(at: separated)
         createWaterRipple(at: location)
         audio.playSFX(.waterDrop)
+        audio.playSFX(.lilyPadAppear)
         Haptics.waterTouch()
         petalBurst += 1
         bobNearbyPads(tapLocation: normalized)
         hintStore.markPoolTapped()
         hintStore.markPoolTappedAgain()
         hintStore.markPoolTappedThrice()
+        saveGardenState()
     }
 
     /// Nudges a point toward the pool center until it's `margin` inside every edge.
@@ -739,6 +755,7 @@ struct GardenView: View {
         hintStore.markThirdPadTapped()
 
         poolPoemsSinceNightingale += 1
+        saveGardenState()
     }
 
     private func bobNearbyPads(tapLocation: CGPoint) {
@@ -800,8 +817,8 @@ struct GardenView: View {
               !showApproachFeather else { return }
 
         hintStore.markNightingaleTapped()
-        audio.playSFX(.nightingaleChirp)
-        audio.playSFX(.wingFlutter)
+        audio.playSFX(.nightingaleFarewell)
+        audio.playSFX(.wingDeparture)
         Haptics.nightingaleTap()
         nightingaleIsPerched = false
 
@@ -1176,6 +1193,7 @@ struct GardenView: View {
         }
         nightingaleIsPerched = true
         poolPoemsSinceNightingale = 0
+        saveGardenState()
 
         // After effects fade out, instant swap back to non-nightingale invitation
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
@@ -1394,6 +1412,7 @@ struct GardenView: View {
         Haptics.lotusBloom()
         let couplet = NightingaleCouplets.couplets[nightingaleCoupletIndex % NightingaleCouplets.couplets.count]
         nightingaleCoupletIndex += 1
+        saveGardenState()
         currentNightingaleCouplet = couplet
         revealedPoemsStore.revealNightingaleCouplet(couplet)
 
@@ -1627,6 +1646,67 @@ struct GardenView: View {
             let dx = sin(time * 0.2 + pad.phase) * baseSpeed * 1.5
             let dy = cos(time * 0.15 + pad.phase) * baseSpeed * 1.5
             return CGPoint(x: dx, y: dy)
+        }
+    }
+
+    // MARK: - Garden State Persistence
+
+    private static let gardenPadsKey = "garden_saved_pads"
+    private static let nightingaleCoupletIndexKey = "garden_nightingale_couplet_index"
+    private static let poolPoemsSinceNightingaleKey = "garden_pool_poems_since_nightingale"
+    private static let nightingalePerchIndexKey = "garden_nightingale_perch_index"
+
+    private func saveGardenState() {
+        let saved = pads.map { pad in
+            SavedPad(
+                anchorX: pad.anchor.x,
+                anchorY: pad.anchor.y,
+                isLotus: pad.isLotus,
+                movementStyle: pad.movementStyle,
+                phase: pad.phase,
+                speed: pad.speed,
+                storedPoemID: pad.storedPoem?.id.uuidString
+            )
+        }
+        if let data = try? JSONEncoder().encode(saved) {
+            UserDefaults.standard.set(data, forKey: Self.gardenPadsKey)
+        }
+        UserDefaults.standard.set(nightingaleCoupletIndex, forKey: Self.nightingaleCoupletIndexKey)
+        UserDefaults.standard.set(poolPoemsSinceNightingale, forKey: Self.poolPoemsSinceNightingaleKey)
+        UserDefaults.standard.set(nightingalePerchIndex, forKey: Self.nightingalePerchIndexKey)
+    }
+
+    private func loadGardenState() {
+        // Restore nightingale counters
+        nightingaleCoupletIndex = UserDefaults.standard.integer(forKey: Self.nightingaleCoupletIndexKey)
+        poolPoemsSinceNightingale = UserDefaults.standard.integer(forKey: Self.poolPoemsSinceNightingaleKey)
+        nightingalePerchIndex = UserDefaults.standard.integer(forKey: Self.nightingalePerchIndexKey)
+
+        // Restore pads
+        guard let data = UserDefaults.standard.data(forKey: Self.gardenPadsKey),
+              let savedPads = try? JSONDecoder().decode([SavedPad].self, from: data),
+              !savedPads.isEmpty else { return }
+
+        // Build lookup from all poems (library + nightingale couplets)
+        let allPoems = PoemLibrary.poems + NightingaleCouplets.couplets
+        let poemByID: [String: Poem] = Dictionary(
+            allPoems.map { ($0.id.uuidString, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        pads = savedPads.compactMap { saved in
+            let poem: Poem? = saved.storedPoemID.flatMap { poemByID[$0] }
+            // Drop non-lotus pads whose poem was removed (they'd do nothing on tap)
+            if !saved.isLotus && poem == nil { return nil }
+            return Pad(
+                anchor: CGPoint(x: saved.anchorX, y: saved.anchorY),
+                isLotus: saved.isLotus,
+                targetAnchor: randomPointInPool(),
+                movementStyle: saved.movementStyle,
+                phase: saved.phase,
+                speed: saved.speed,
+                storedPoem: poem
+            )
         }
     }
 }

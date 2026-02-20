@@ -16,13 +16,13 @@ struct MainAppView: View {
     @State private var pendingTab: Int? = nil
     @State private var windDirection: PetalWindDirection = .rightToLeft
 
-    // Persian palette
-    private let gold = Color(red: 1.0, green: 0.92, blue: 0.65)
-    private let darkGold = Color(red: 0.92, green: 0.78, blue: 0.48)
-    private let dimGold = Color(red: 0.7, green: 0.6, blue: 0.4)
-    private let rose = Color(red: 0.9, green: 0.4, blue: 0.5)
-    private let deepBlue = Color(red: 0.03, green: 0.08, blue: 0.18)
-    private let lighterBlue = Color(red: 0.06, green: 0.13, blue: 0.26)
+    // Persian palette (centralized in PersianColors)
+    private let gold = Color.gardenGold
+    private let darkGold = Color.gardenDarkGold
+    private let dimGold = Color.gardenDimGold
+    private let rose = Color.gardenRose
+    private let deepBlue = Color.gardenDeepBlue
+    private let lighterBlue = Color.gardenLighterBlue
 
     var body: some View {
         ZStack {
@@ -85,6 +85,7 @@ struct MainAppView: View {
 
         return Button {
             if tab == -1 {
+                audio.playSFX(.gentleTap)
                 showMainApp = false
             } else {
                 switchTab(to: tab)
