@@ -19,6 +19,15 @@ struct PoemOverlayView: View {
 
     @State private var showText = false
 
+    // Dynamic Type scaled base sizes (phone/pool values — multiplied for iPad/nightingale)
+    @ScaledMetric(relativeTo: .subheadline) private var poetBase: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption2) private var labelBase: CGFloat = 9
+    @ScaledMetric(relativeTo: .body) private var translationBase: CGFloat = 17
+    @ScaledMetric(relativeTo: .subheadline) private var persianBase: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var dotsBase: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var noteBase: CGFloat = 10
+    @ScaledMetric(relativeTo: .caption) private var reflectionBase: CGFloat = 11
+
     var isIPad: Bool {
         horizontalSizeClass == .regular
     }
@@ -57,7 +66,7 @@ struct PoemOverlayView: View {
 
                                     Text("— \(poet)")
                                         .font(.system(
-                                            size: isIPad ? (isNightingale ? 18 : 20) : (isNightingale ? 12 : 14),
+                                            size: isIPad ? poetBase * (isNightingale ? 1.29 : 1.43) : (isNightingale ? poetBase * 0.86 : poetBase),
                                             weight: isNightingale ? .medium : .semibold,
                                             design: .serif
                                         ))
@@ -66,14 +75,14 @@ struct PoemOverlayView: View {
                                         .tracking(isNightingale ? 2.0 : 1.5)
 
                                     Text("Translation")
-                                        .font(.system(size: isIPad ? 12 : 9, design: .serif))
+                                        .font(.system(size: isIPad ? labelBase * 1.33 : labelBase, design: .serif))
                                         .foregroundStyle(accentColor.opacity(0.5))
                                         .textCase(.uppercase)
                                         .tracking(1)
 
                                     Text(english)
                                         .font(.system(
-                                            size: isIPad ? (isNightingale ? 21 : 24) : (isNightingale ? 15 : 17),
+                                            size: isIPad ? translationBase * (isNightingale ? 1.24 : 1.41) : (isNightingale ? translationBase * 0.88 : translationBase),
                                             weight: .medium,
                                             design: .serif
                                         ))
@@ -83,14 +92,14 @@ struct PoemOverlayView: View {
                                         .minimumScaleFactor(0.7)
 
                                     Text("Original")
-                                        .font(.system(size: isIPad ? 12 : 9, design: .serif))
+                                        .font(.system(size: isIPad ? labelBase * 1.33 : labelBase, design: .serif))
                                         .foregroundStyle(accentColor.opacity(0.5))
                                         .textCase(.uppercase)
                                         .tracking(1)
 
                                     Text(persian)
                                         .font(.system(
-                                            size: isIPad ? (isNightingale ? 16 : 18) : (isNightingale ? 12 : 14),
+                                            size: isIPad ? persianBase * (isNightingale ? 1.14 : 1.29) : (isNightingale ? persianBase * 0.86 : persianBase),
                                             weight: .medium,
                                             design: .serif
                                         ))
@@ -101,7 +110,7 @@ struct PoemOverlayView: View {
                                     // Divider — decorative dots for nightingale, line for pool
                                     if isNightingale {
                                         Text("·  ·  ·")
-                                            .font(.system(size: isIPad ? 16 : 12, weight: .light, design: .serif))
+                                            .font(.system(size: isIPad ? dotsBase * 1.33 : dotsBase, weight: .light, design: .serif))
                                             .foregroundStyle(dividerColor.opacity(0.6))
                                             .padding(.vertical, isIPad ? 3 : 2)
                                     } else {
@@ -112,14 +121,14 @@ struct PoemOverlayView: View {
                                     }
 
                                     Text(culturalNote)
-                                        .font(.system(size: isIPad ? (isNightingale ? 12 : 13) : (isNightingale ? 9 : 10), design: .serif))
+                                        .font(.system(size: isIPad ? noteBase * (isNightingale ? 1.2 : 1.3) : (isNightingale ? noteBase * 0.9 : noteBase), design: .serif))
                                         .multilineTextAlignment(.center)
                                         .foregroundStyle(accentColor.opacity(0.75))
 
                                     // Reflection — lighter and warmer for nightingale
                                     Text(reflection)
                                         .font(.system(
-                                            size: isIPad ? (isNightingale ? 13 : 14) : (isNightingale ? 11 : 11),
+                                            size: isIPad ? reflectionBase * (isNightingale ? 1.18 : 1.27) : reflectionBase,
                                             weight: isNightingale ? .light : .medium,
                                             design: .serif
                                         ))
@@ -150,6 +159,7 @@ struct PoemOverlayView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .transition(
             reduceMotion
             ? .opacity

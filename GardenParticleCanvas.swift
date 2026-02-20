@@ -258,6 +258,7 @@ final class ParticleData: ObservableObject, @unchecked Sendable {
 struct GardenParticleCanvas: View {
     let petalBurst: Int
     var reduceMotion: Bool = false
+    var isActive: Bool = true
 
     @StateObject private var system = ParticleData()
 
@@ -265,8 +266,9 @@ struct GardenParticleCanvas: View {
         if reduceMotion {
             EmptyView()
         } else {
-            TimelineView(.animation) { timeline in
+            TimelineView(.animation(paused: !isActive)) { timeline in
                 Canvas(rendersAsynchronously: false) { context, size in
+                    guard isActive else { return }
                     system.update(
                         time: timeline.date.timeIntervalSinceReferenceDate,
                         size: size

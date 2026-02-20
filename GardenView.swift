@@ -51,6 +51,9 @@ struct GardenView: View {
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     private let audio = GardenAudioEngine.shared
 
+    @ScaledMetric(relativeTo: .callout) private var whisperSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .body) private var approachWhisperSize: CGFloat = 18
+
     @State private var showPoem = false
     @State private var currentPoem: Poem?
     @State private var pads: [Pad] = []
@@ -78,6 +81,7 @@ struct GardenView: View {
     @State private var featherOpacity: Double = 0
     @State private var showApproachWhisper = false
     @State private var currentApproachWhisper: String = ""
+    @State private var nightingaleGlowOpacity: Double = 0  // holy light fade-in
 
     // Bounding flight animation (timer-driven, NOT SwiftUI animation)
     @State private var nightingaleFlightT: CGFloat = 0
@@ -170,32 +174,23 @@ struct GardenView: View {
                 }
 
                 // Nightingale hint glow — rendered BEHIND the bird so it looks backlit
-                if showNightingale {
-                    if let stage = hintStore.activeHint, stage == .tapNightingale,
-                       hintVisible, !showApproachFeather, !showApproachWhisper {
-                        GardenHintView(
-                            stage: stage,
-                            targetPosition: hintPosition(for: stage, in: geo.size),
-                            screenSize: geo.size,
-                            reduceMotion: reduceMotion,
-                            mode: .tutorial
-                        )
-                        .allowsHitTesting(false)
-                        .transition(.opacity)
-                    }
-
-                    if let invitation = invitationStage(in: geo.size),
-                       invitation.stage == .tapNightingale, hintVisible {
-                        GardenHintView(
-                            stage: invitation.stage,
-                            targetPosition: invitation.position,
-                            screenSize: geo.size,
-                            reduceMotion: reduceMotion,
-                            mode: .invitation
-                        )
-                        .allowsHitTesting(false)
-                        .transition(.opacity)
-                    }
+                // effectsOpacity fades bright effects; vignette stays independent
+                // Renders as soon as showNightingale is true (not just perched) so
+                // the vignette crossfades with any non-nightingale invitation
+                if showNightingale, hintVisible,
+                   !showApproachFeather, !showApproachWhisper,
+                   !showPoem, !showNightingaleCouplet {
+                    let hintPos = hintPosition(for: .tapNightingale, in: geo.size)
+                    let hintMode: GardenHintMode = (hintStore.activeHint == .tapNightingale) ? .tutorial : .invitation
+                    GardenHintView(
+                        stage: .tapNightingale,
+                        targetPosition: hintPos,
+                        screenSize: geo.size,
+                        reduceMotion: reduceMotion,
+                        mode: hintMode,
+                        effectsOpacity: nightingaleGlowOpacity
+                    )
+                    .allowsHitTesting(false)
                 }
 
                 // Nightingale — rendered on top of its glow
@@ -214,9 +209,7 @@ struct GardenView: View {
                     }
                 }
 
-                if isActive {
-                    GardenParticleCanvas(petalBurst: petalBurst, reduceMotion: reduceMotion)
-                }
+                GardenParticleCanvas(petalBurst: petalBurst, reduceMotion: reduceMotion, isActive: isActive)
 
                 ForEach(fireflies) { firefly in
                     Circle()
@@ -252,8 +245,9 @@ struct GardenView: View {
                 }
 
                 // Garden hints — persistent invitation glow (non-nightingale)
+                // Hidden when nightingale is present — its own hint takes over
                 if let invitation = invitationStage(in: geo.size), hintVisible,
-                   invitation.stage != .tapNightingale {
+                   invitation.stage != .tapNightingale, !showNightingale {
                     GardenHintView(
                         stage: invitation.stage,
                         targetPosition: invitation.position,
@@ -270,14 +264,16 @@ struct GardenView: View {
                         .ignoresSafeArea()
                         .onTapGesture {
                             audio.playSFX(.poemDismiss)
+                            Haptics.poemDismiss()
                             if reduceMotion {
                                 withAnimation(.default) {
                                     showPoem = false
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                     currentPoem = nil
-                                    if poolPoemsSinceNightingale >= 3 && !showNightingale {
+                                    if poolPoemsSinceNightingale >= 3 && !showNightingale && !nightingaleInFlight {
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            guard !nightingaleInFlight, !showNightingale else { return }
                                             nightingaleFlyIn()
                                         }
                                     } else {
@@ -290,8 +286,9 @@ struct GardenView: View {
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                                     currentPoem = nil
-                                    if poolPoemsSinceNightingale >= 3 && !showNightingale {
+                                    if poolPoemsSinceNightingale >= 3 && !showNightingale && !nightingaleInFlight {
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            guard !nightingaleInFlight, !showNightingale else { return }
                                             nightingaleFlyIn()
                                         }
                                     } else {
@@ -323,6 +320,7 @@ struct GardenView: View {
                         .ignoresSafeArea()
                         .onTapGesture {
                             audio.playSFX(.poemDismiss)
+                            Haptics.poemDismiss()
                             if reduceMotion {
                                 withAnimation(.default) {
                                     showNightingaleCouplet = false
@@ -365,7 +363,7 @@ struct GardenView: View {
                     .allowsHitTesting(false)
 
                 Text(currentDepartureWhisper)
-                    .font(.system(size: 16, weight: .light, design: .serif))
+                    .font(.system(size: whisperSize, weight: .light, design: .serif))
                     .italic()
                     .foregroundColor(Color(red: 1.0, green: 0.92, blue: 0.65))
                     .shadow(color: .black.opacity(0.8), radius: 8)
@@ -377,6 +375,8 @@ struct GardenView: View {
                 if showApproachFeather || showApproachWhisper {
                     nightingaleApproachHintView(in: geo.size)
                         .allowsHitTesting(false)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("A golden feather descends — the nightingale draws near")
                 }
 
             }
@@ -499,6 +499,7 @@ struct GardenView: View {
         createLilyPad(at: separated)
         createWaterRipple(at: location)
         audio.playSFX(.waterDrop)
+        Haptics.waterTouch()
         petalBurst += 1
         bobNearbyPads(tapLocation: normalized)
         hintStore.markPoolTapped()
@@ -713,6 +714,7 @@ struct GardenView: View {
         pads[index].isLotus = true
         pads[index].glowIntensity = 1.0
         audio.playSFX(.lotusBloom)
+        Haptics.lotusBloom()
 
         if let poem = pads[index].storedPoem {
             currentPoem = poem
@@ -762,15 +764,19 @@ struct GardenView: View {
         let enterY: CGFloat = destination.y - 0.10
         nightingaleFacingRight = !enterFromRight
 
-        showNightingale = true
         nightingaleIsPerched = false
         nightingaleIsFlyingOut = false
+        nightingaleGlowOpacity = 0
 
         if reduceMotion {
+            showNightingale = true
             nightingalePosition = destination
             nightingaleIsPerched = true
             nightingaleAppearOpacity = 1
+            nightingaleGlowOpacity = 1
         } else {
+            // Instant swap — nightingale vignette replaces non-nightingale in same frame
+            showNightingale = true
             nightingaleFlightOrigin = CGPoint(x: enterX, y: enterY)
             nightingaleFlightDest = destination
             nightingaleFlightT = 0
@@ -788,13 +794,21 @@ struct GardenView: View {
 
     private func handleNightingaleTap(in size: CGSize) {
         guard nightingaleIsPerched,
+              !nightingaleInFlight,
               !showPoem,
-              !showNightingaleCouplet else { return }
+              !showNightingaleCouplet,
+              !showApproachFeather else { return }
 
         hintStore.markNightingaleTapped()
         audio.playSFX(.nightingaleChirp)
         audio.playSFX(.wingFlutter)
+        Haptics.nightingaleTap()
         nightingaleIsPerched = false
+
+        // Fade out holy light as the bird takes off
+        withAnimation(.easeOut(duration: 0.6)) {
+            nightingaleGlowOpacity = 0
+        }
 
         let startPos = nightingalePosition
         let flyOutRight = startPos.x < 0.5
@@ -854,37 +868,37 @@ struct GardenView: View {
         featherOpacity = 0
 
         // Feather fades in gently
-        withAnimation(.easeIn(duration: 1.0)) {
+        withAnimation(.easeIn(duration: 0.8)) {
             featherOpacity = 1.0
         }
-        // Linear fall over 7 seconds — slow, graceful descent
-        withAnimation(.linear(duration: 7.0)) {
+        // Linear fall over 4.5 seconds — graceful but purposeful
+        withAnimation(.linear(duration: 4.5)) {
             featherFallProgress = 1.0
         }
 
         // Whisper text appears mid-fall
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            withAnimation(.easeIn(duration: 0.8)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            withAnimation(.easeIn(duration: 0.6)) {
                 showApproachWhisper = true
             }
         }
 
-        // Feather fades out very gradually over 2 seconds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.5) {
-            withAnimation(.easeOut(duration: 2.0)) {
+        // Feather fades out
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) {
+            withAnimation(.easeOut(duration: 1.5)) {
                 featherOpacity = 0
             }
         }
 
         // Whisper fades out
-        DispatchQueue.main.asyncAfter(deadline: .now() + 6.5) {
-            withAnimation(.easeOut(duration: 1.2)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.8) {
+            withAnimation(.easeOut(duration: 1.0)) {
                 showApproachWhisper = false
             }
         }
 
         // Reset feather state — after everything has fully faded
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.5) {
             showApproachFeather = false
             featherFallProgress = 0
         }
@@ -895,7 +909,7 @@ struct GardenView: View {
         // --- Feather dancing with the wind ---
         // Layered sinusoids at irrational frequency ratios = organic, never-repeating motion
         let t = Double(featherFallProgress)
-        let time = t * 7.0
+        let time = t * 4.5
 
         let buildUp = min(1.0, time / 1.0)
 
@@ -1135,7 +1149,7 @@ struct GardenView: View {
             // Whisper text
             if showApproachWhisper {
                 Text(currentApproachWhisper)
-                    .font(.system(size: 18, weight: .regular, design: .serif))
+                    .font(.system(size: approachWhisperSize, weight: .regular, design: .serif))
                     .italic()
                     .foregroundStyle(
                         LinearGradient(
@@ -1154,15 +1168,23 @@ struct GardenView: View {
 
     private func nightingaleDismiss() {
         audio.playSFX(.whisperTone)
-        showNightingale = false
-        nightingaleAppearOpacity = 0
+
+        // Fade out holy light gracefully, then remove the nightingale
+        withAnimation(.easeOut(duration: 1.2)) {
+            nightingaleGlowOpacity = 0
+            nightingaleAppearOpacity = 0
+        }
         nightingaleIsPerched = true
         poolPoemsSinceNightingale = 0
 
-        // Departure whisper — cycles through different lines
-        currentDepartureWhisper = departureWhispers[
-            (nightingaleCoupletIndex - 1) % departureWhispers.count
-        ]
+        // After effects fade out, instant swap back to non-nightingale invitation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            showNightingale = false
+        }
+
+        // Departure whisper — cycles through different lines (safe modulo)
+        let whisperIdx = (nightingaleCoupletIndex + departureWhispers.count - 1) % departureWhispers.count
+        currentDepartureWhisper = departureWhispers[whisperIdx]
         withAnimation(.easeIn(duration: 0.8)) {
             nightingaleWhisperOpacity = 1.0
         }
@@ -1350,9 +1372,15 @@ struct GardenView: View {
             // Landing: slight downward bob from weight, then spring settle
             let dest = nightingaleFlightDest
             nightingalePosition = CGPoint(x: dest.x, y: dest.y + 0.006)
+            Haptics.nightingaleLanding()
             withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
                 nightingalePosition = dest
             }
+            // Holy light begins rising as the bird settles
+            withAnimation(.easeIn(duration: 2.5)) {
+                nightingaleGlowOpacity = 1
+            }
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                 nightingaleIsPerched = true
                 petalBurst += 1
@@ -1363,6 +1391,7 @@ struct GardenView: View {
 
     private func showBonusCouplet() {
         audio.playSFX(.poemReveal)
+        Haptics.lotusBloom()
         let couplet = NightingaleCouplets.couplets[nightingaleCoupletIndex % NightingaleCouplets.couplets.count]
         nightingaleCoupletIndex += 1
         currentNightingaleCouplet = couplet
@@ -1390,8 +1419,11 @@ struct GardenView: View {
             }
             return CGPoint(x: 0.70 * size.width, y: 0.82 * size.height)
         case .tapNightingale:
-            return CGPoint(x: nightingalePosition.x * size.width,
-                           y: nightingalePosition.y * size.height)
+            // During fly-in, use destination so the vignette prepares the landing spot
+            let pos = (nightingaleInFlight && !nightingaleIsFlyingOut)
+                ? nightingaleFlightDest
+                : nightingalePosition
+            return CGPoint(x: pos.x * size.width, y: pos.y * size.height)
         }
     }
 
@@ -1402,6 +1434,8 @@ struct GardenView: View {
         if showNightingale && nightingaleIsPerched {
             return (.tapNightingale, hintPosition(for: .tapNightingale, in: size))
         }
+        // Suppress pool/lily invitation when nightingale arrival is imminent or in flight
+        guard !nightingaleInFlight, poolPoemsSinceNightingale < 3 else { return nil }
         if pads.contains(where: { !$0.isLotus }) {
             return (.tapLilyPad, hintPosition(for: .tapLilyPad, in: size))
         }

@@ -100,6 +100,7 @@ private final class DustParticleData: ObservableObject, @unchecked Sendable {
 
 struct LibraryDustCanvas: View {
     var reduceMotion: Bool = false
+    var isActive: Bool = true
 
     @StateObject private var system = DustParticleData()
 
@@ -107,8 +108,9 @@ struct LibraryDustCanvas: View {
         if reduceMotion {
             EmptyView()
         } else {
-            TimelineView(.animation) { timeline in
+            TimelineView(.animation(paused: !isActive)) { timeline in
                 Canvas(rendersAsynchronously: false) { context, size in
+                    guard isActive else { return }
                     system.update(
                         time: timeline.date.timeIntervalSinceReferenceDate,
                         size: size

@@ -117,7 +117,7 @@ final class SanturSynthesizer: @unchecked Sendable {
     // MARK: - Voices
 
     private var voices: [SanturVoice]
-    private let voiceCount = 10
+    private let voiceCount = 12
 
     // MARK: - Navigation State
 
@@ -207,7 +207,7 @@ final class SanturSynthesizer: @unchecked Sendable {
 
     init(sampleRate: Double) {
         self.sampleRate = sampleRate
-        self.voices = (0..<10).map { _ in SanturVoice(sampleRate: sampleRate) }
+        self.voices = (0..<12).map { _ in SanturVoice(sampleRate: sampleRate) }
         self.gushehs = SanturSynthesizer.buildGushehs()
         self.gushehVisitCounts = [Int](repeating: 0, count: 7)
         samplesUntilEvent = Int(Double.random(in: 1.0...2.0) * sampleRate)
@@ -465,7 +465,7 @@ final class SanturSynthesizer: @unchecked Sendable {
         let roll = Double.random(in: 0...1)
         if roll < 0.05 {
             state = .resting
-            samplesUntilEvent = Int(Double.random(in: 6.0...12.0) * sampleRate)
+            samplesUntilEvent = Int(Double.random(in: 3.5...7.0) * sampleRate)
             return true
         }
         if roll < 0.09 && currentMotif.count > 4 {
@@ -508,7 +508,7 @@ final class SanturSynthesizer: @unchecked Sendable {
         let freq = frequencyForDegree(degree, ascending: ascending)
         let vel = gushehVelocity(degree: degree)
 
-        let ornProb = 0.12 + Double(gushehs[currentGushehIdx].intensity) * 0.22
+        let ornProb = 0.20 + Double(gushehs[currentGushehIdx].intensity) * 0.30
         if Double.random(in: 0...1) < ornProb
             && motifIndex > 0 && motifIndex < currentMotif.count - 1 {
             let ornType = selectOrnament()
@@ -525,8 +525,15 @@ final class SanturSynthesizer: @unchecked Sendable {
         }
 
         strikeNote(frequency: freq, velocity: vel)
-        if Double.random(in: 0...1) < 0.08 && degree >= 2 && degree <= 7 {
-            strikeNote(frequency: freq * 2.0, velocity: vel * 0.22)
+        // Octave doubling — warm fullness
+        if Double.random(in: 0...1) < 0.20 && degree >= 2 && degree <= 7 {
+            strikeNote(frequency: freq * 2.0, velocity: vel * 0.20)
+        }
+        // Fifth doubling on important notes — harmonic richness
+        if Double.random(in: 0...1) < 0.10 {
+            let fifthDeg = max(0, min(9, degree + 3))
+            strikeGhost(frequency: frequencyForDegree(fifthDeg, ascending: ascending),
+                        velocity: vel * 0.10)
         }
         previousDegree = degree; lastDirection = direction; motifIndex += 1
 
@@ -733,7 +740,7 @@ final class SanturSynthesizer: @unchecked Sendable {
     private func continueRiz() {
         guard rizStrikesLeft > 0 else {
             state = .resting
-            samplesUntilEvent = withRubato(Double.random(in: 2.5...5.0))
+            samplesUntilEvent = withRubato(Double.random(in: 1.5...3.0))
             return
         }
         let progress = Float(rizStrikeNum) / Float(max(1, rizTotalStrikes))
@@ -772,7 +779,7 @@ final class SanturSynthesizer: @unchecked Sendable {
             samplesUntilEvent = max(1, Int((baseIOI * swing + jitter) * sampleRate))
         } else {
             state = .resting
-            samplesUntilEvent = withRubato(Double.random(in: 2.5...5.0))
+            samplesUntilEvent = withRubato(Double.random(in: 1.5...3.0))
         }
     }
 
@@ -781,21 +788,38 @@ final class SanturSynthesizer: @unchecked Sendable {
     private func finishPhrase() {
         state = .resting
         lastPhraseEndedOnFinalis = (currentMotif.last == 2)
-        if Double.random(in: 0...1) < 0.12 {
+
+        // Sympathetic low-register ring at phrase end
+        if Double.random(in: 0...1) < 0.18 {
             strikeNote(frequency: frequencyForDegree(0, ascending: true),
                        velocity: Float.random(in: 0.08...0.14))
-            if Double.random(in: 0...1) < 0.40 {
+            if Double.random(in: 0...1) < 0.45 {
                 let g3freq = SanturSynthesizer.d4Hz * pow(2.0, (-1200.0 + 486.0) / 1200.0)
                 strikeGhost(frequency: g3freq, velocity: 0.04)
             }
         }
+
+        // Sustain echo — soft re-strike of final note on shahed/finalis
         let g = gushehs[currentGushehIdx]
+        if let lastDeg = currentMotif.last,
+           (lastDeg == g.shahed || lastDeg == 2) {
+            strikeGhost(frequency: frequencyForDegree(lastDeg, ascending: false),
+                        velocity: Float.random(in: 0.025...0.045))
+        }
+
+        // Pedal drone — low D3 for warmth every few phrases or after forud
+        if totalPhrases % 3 == 0 || (isForudPhrase && Double.random(in: 0...1) < 0.60) {
+            let d3Freq = SanturSynthesizer.d4Hz * 0.5
+            strikeGhost(frequency: d3Freq, velocity: Float.random(in: 0.035...0.055))
+        }
+
+        // Reduced rest times — keep the music flowing
         let baseRest: Double
-        if g.intensity < 0.35 { baseRest = Double.random(in: 2.5...5.5) }
-        else if g.intensity < 0.55 { baseRest = Double.random(in: 1.8...4.0) }
-        else if g.intensity < 0.70 { baseRest = Double.random(in: 1.2...2.8) }
-        else { baseRest = Double.random(in: 0.8...2.2) }
-        let multiplier = phrasesSinceForud == 0 ? 1.4 : 1.0
+        if g.intensity < 0.35 { baseRest = Double.random(in: 1.5...3.5) }
+        else if g.intensity < 0.55 { baseRest = Double.random(in: 1.0...2.5) }
+        else if g.intensity < 0.70 { baseRest = Double.random(in: 0.7...1.8) }
+        else { baseRest = Double.random(in: 0.5...1.5) }
+        let multiplier = phrasesSinceForud == 0 ? 1.3 : 1.0
         samplesUntilEvent = withRubato(baseRest * multiplier)
     }
 
@@ -823,10 +847,10 @@ final class SanturSynthesizer: @unchecked Sendable {
         let remaining = currentMotif.count - motifIndex
         let g = gushehs[currentGushehIdx]
         var delay: Double
-        if remaining <= 1 { delay = Double.random(in: 0.55...1.1) }
-        else if lastDirection > 0 { delay = Double.random(in: 0.22...0.48) }
-        else if lastDirection < 0 { delay = Double.random(in: 0.38...0.80) }
-        else { delay = Double.random(in: 0.28...0.60) }
+        if remaining <= 1 { delay = Double.random(in: 0.45...0.90) }
+        else if lastDirection > 0 { delay = Double.random(in: 0.18...0.40) }
+        else if lastDirection < 0 { delay = Double.random(in: 0.30...0.65) }
+        else { delay = Double.random(in: 0.22...0.50) }
         if currentDegree == g.shahed && Double.random(in: 0...1) < 0.35 { delay *= 1.5 }
         else if currentDegree == 2 && Double.random(in: 0...1) < 0.30 { delay *= 1.4 }
         if isForudPhrase && remaining <= 4 {
@@ -852,9 +876,9 @@ final class SanturSynthesizer: @unchecked Sendable {
         voices[quietest].strike(frequency: frequency, velocity: velocity)
         if velocity > 0.06 {
             if frequency > 200 {
-                strikeGhost(frequency: frequency / 2.0, velocity: velocity * 0.030)
+                strikeGhost(frequency: frequency / 2.0, velocity: velocity * 0.042)
             }
-            strikeGhost(frequency: frequency * 1.498, velocity: velocity * 0.018)
+            strikeGhost(frequency: frequency * 1.498, velocity: velocity * 0.025)
         }
     }
 

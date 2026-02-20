@@ -21,6 +21,7 @@ struct GardenHintView: View {
     let screenSize: CGSize
     let reduceMotion: Bool
     let mode: GardenHintMode
+    var effectsOpacity: Double = 1.0  // fades bright effects without touching the vignette
 
     @State private var ring0: CGFloat = 0
     @State private var ring1: CGFloat = 0
@@ -83,6 +84,7 @@ struct GardenHintView: View {
         let pos = targetPosition
         let os = opacityScale
         return ZStack {
+            // Vignette — stays independent of effectsOpacity
             RadialGradient(
                 colors: [.clear, Color.black.opacity(0.40 * os)],
                 center: UnitPoint(
@@ -94,43 +96,48 @@ struct GardenHintView: View {
             )
             .ignoresSafeArea()
 
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [c.opacity(0.50 * os), c.opacity(0.15 * os), .clear],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: isNightingale ? 150 : 130
-                    )
-                )
-                .frame(width: isNightingale ? 300 : 260,
-                       height: isNightingale ? 300 : 260)
-                .position(pos)
-
-            Circle()
-                .fill(c)
-                .frame(width: 12, height: 12)
-                .opacity(0.7 * os)
-                .blur(radius: 3)
-                .position(pos)
-
-            if isNightingale {
-                HolySpotlight(
-                    color: c, targetPosition: pos, screenSize: screenSize,
-                    breathe: 0.5, opacityScale: os
-                )
-            } else {
+            // Bright effects — scaled by effectsOpacity
+            Group {
                 Circle()
-                    .stroke(c.opacity(0.7 * os), lineWidth: 4)
-                    .blur(radius: 3)
-                    .frame(width: r * 2, height: r * 2)
+                    .fill(
+                        RadialGradient(
+                            colors: [c.opacity(0.50 * os), c.opacity(0.15 * os), .clear],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: isNightingale ? 150 : 130
+                        )
+                    )
+                    .frame(width: isNightingale ? 300 : 260,
+                           height: isNightingale ? 300 : 260)
                     .position(pos)
-            }
 
-            if mode == .tutorial {
-                HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
-                          opacity: 0.85, yOffset: 0)
+                Circle()
+                    .fill(c)
+                    .frame(width: 12, height: 12)
+                    .opacity(0.7 * os)
+                    .blur(radius: 3)
+                    .position(pos)
+
+                if isNightingale {
+                    HolySpotlight(
+                        color: c, targetPosition: pos, screenSize: screenSize,
+                        opacityScale: os
+                    )
+                    .opacity(0.55)
+                } else {
+                    Circle()
+                        .stroke(c.opacity(0.7 * os), lineWidth: 4)
+                        .blur(radius: 3)
+                        .frame(width: r * 2, height: r * 2)
+                        .position(pos)
+                }
+
+                if mode == .tutorial {
+                    HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
+                              opacity: 0.85, yOffset: 0)
+                }
             }
+            .opacity(effectsOpacity)
         }
     }
 
@@ -158,87 +165,93 @@ struct GardenHintView: View {
             .ignoresSafeArea()
             .opacity(spotlightOpacity / 0.35)
 
-            // 2. Radial glow beacon
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: isNightingale
-                            ? [Color.white.opacity(glowOpacity * 0.5),
-                               c.opacity(glowOpacity),
-                               c.opacity(glowOpacity * 0.3),
-                               .clear]
-                            : [c.opacity(glowOpacity),
-                               c.opacity(glowOpacity * 0.3),
-                               .clear],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: isNightingale ? 200 : 130
-                    )
-                )
-                .frame(width: isNightingale ? 400 : 260,
-                       height: isNightingale ? 400 : 260)
-                .position(pos)
-
-            if isNightingale {
-                // --- Nightingale: THE HOLIEST BEING ON EARTH ---
-
-                // Holy spotlight — intense divine beam from above
-                HolySpotlight(
-                    color: c, targetPosition: pos, screenSize: screenSize,
-                    breathe: breathe, opacityScale: os
-                )
-
-                // Divine halo behind the nightingale
-                NightingaleHalo(color: c, position: pos,
-                                breathe: breathe, opacityScale: os)
-
-                // Rotating shimmer rays — brighter, more rays
-                NightingaleRaysView(
-                    color: c, position: pos, angle: shimmerAngle,
-                    breathe: breathe, opacityScale: os
-                )
-
-                // Ascending holy sparks
-                HolySparkCanvas(color: c, targetPosition: pos)
-                    .opacity(os)
-
-                // Falling golden dust
-                NightingaleDustCanvas(color: c, targetPosition: pos)
-                    .opacity(os)
-
-                // Radiant pulsing star at center
-                NightingaleStar(color: c, position: pos,
-                                breathe: breathe, opacityScale: os)
-
-            } else {
-                // --- Pool / Lily Pad: ripple rings + rising motes ---
-
-                // Bright pulsing center dot
+            // All bright effects — scaled by effectsOpacity (vignette above stays independent)
+            Group {
+                // 2. Radial glow beacon
                 Circle()
-                    .fill(c)
-                    .frame(width: 10 + breathe * 4, height: 10 + breathe * 4)
-                    .opacity((0.6 + breathe * 0.3) * os)
-                    .blur(radius: 3)
+                    .fill(
+                        RadialGradient(
+                            colors: isNightingale
+                                ? [Color.white.opacity(glowOpacity * 0.5),
+                                   c.opacity(glowOpacity),
+                                   c.opacity(glowOpacity * 0.3),
+                                   .clear]
+                                : [c.opacity(glowOpacity),
+                                   c.opacity(glowOpacity * 0.3),
+                                   .clear],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: isNightingale ? 200 : 130
+                        )
+                    )
+                    .frame(width: isNightingale ? 400 : 260,
+                           height: isNightingale ? 400 : 260)
                     .position(pos)
 
-                // Rising motes
-                HintMotesCanvas(color: c, targetPosition: pos)
-                    .opacity(os)
+                if isNightingale {
+                    // --- Nightingale: THE HOLIEST BEING ON EARTH ---
 
-                // Glow ripple rings
-                HintRippleRing(color: c, baseRadius: r, position: pos, progress: ring0)
-                    .opacity(os)
-                HintRippleRing(color: c, baseRadius: r, position: pos, progress: ring1)
-                    .opacity(os)
-                HintRippleRing(color: c, baseRadius: r, position: pos, progress: ring2)
-                    .opacity(os)
-            }
+                    // Holy spotlight — blur cached via drawingGroup,
+                    // breathe only drives external .opacity() (no blur recompute)
+                    HolySpotlight(
+                        color: c, targetPosition: pos, screenSize: screenSize,
+                        opacityScale: os
+                    )
+                    .opacity(0.45 + Double(breathe) * 0.20)
 
-            // Text label (tutorial only)
-            if mode == .tutorial {
-                HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
-                          opacity: textOpacity, yOffset: textOffset)
+                    // Divine halo behind the nightingale
+                    NightingaleHalo(color: c, position: pos,
+                                    breathe: breathe, opacityScale: os)
+
+                    // Rotating shimmer rays — brighter, more rays
+                    NightingaleRaysView(
+                        color: c, position: pos, angle: shimmerAngle,
+                        breathe: breathe, opacityScale: os
+                    )
+
+                    // Ascending holy sparks
+                    HolySparkCanvas(color: c, targetPosition: pos, isActive: effectsOpacity > 0.05)
+                        .opacity(os)
+
+                    // Falling golden dust
+                    NightingaleDustCanvas(color: c, targetPosition: pos, isActive: effectsOpacity > 0.05)
+                        .opacity(os)
+
+                    // Radiant pulsing star at center
+                    NightingaleStar(color: c, position: pos,
+                                    breathe: breathe, opacityScale: os)
+
+                } else {
+                    // --- Pool / Lily Pad: ripple rings + rising motes ---
+
+                    // Bright pulsing center dot
+                    Circle()
+                        .fill(c)
+                        .frame(width: 10 + breathe * 4, height: 10 + breathe * 4)
+                        .opacity((0.6 + breathe * 0.3) * os)
+                        .blur(radius: 3)
+                        .position(pos)
+
+                    // Rising motes
+                    HintMotesCanvas(color: c, targetPosition: pos)
+                        .opacity(os)
+
+                    // Glow ripple rings
+                    HintRippleRing(color: c, baseRadius: r, position: pos, progress: ring0)
+                        .opacity(os)
+                    HintRippleRing(color: c, baseRadius: r, position: pos, progress: ring1)
+                        .opacity(os)
+                    HintRippleRing(color: c, baseRadius: r, position: pos, progress: ring2)
+                        .opacity(os)
+                }
+
+                // Text label (tutorial only)
+                if mode == .tutorial {
+                    HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
+                              opacity: textOpacity, yOffset: textOffset)
+                }
             }
+            .opacity(effectsOpacity)
         }
         .onAppear { startAnimations() }
     }
@@ -407,8 +420,6 @@ private struct NightingaleRaysView: View {
     private let rayLength: CGFloat = 130
 
     var body: some View {
-        let warmWhite = Color(red: 1.0, green: 0.97, blue: 0.88)
-
         Canvas(rendersAsynchronously: false) { context, size in
             let center = position
             let baseOp = (0.30 + Double(breathe) * 0.20) * opacityScale
@@ -418,9 +429,9 @@ private struct NightingaleRaysView: View {
                 let dx = cos(rayAngle)
                 let dy = sin(rayAngle)
 
-                // Alternating long and short rays for variety
+                // Wider rays compensate for removed blur — gradient edges stay soft
                 let thisLength = (i % 2 == 0) ? rayLength : rayLength * 0.7
-                let thisWidth: CGFloat = (i % 2 == 0) ? 12 : 8
+                let thisWidth: CGFloat = (i % 2 == 0) ? 20 : 14
 
                 let tipX = center.x + CGFloat(dx) * thisLength
                 let tipY = center.y + CGFloat(dy) * thisLength
@@ -448,7 +459,6 @@ private struct NightingaleRaysView: View {
                 )
             }
         }
-        .blur(radius: 5)
         .allowsHitTesting(false)
     }
 }
@@ -524,12 +534,12 @@ private struct HolySpotlight: View {
     let color: Color
     let targetPosition: CGPoint
     let screenSize: CGSize
-    let breathe: CGFloat
     let opacityScale: Double
+    // breathe removed — caller applies it via .opacity() so blurs are never recomputed.
 
     var body: some View {
         let pos = targetPosition
-        let beamBaseOp = (0.45 + Double(breathe) * 0.20) * opacityScale
+        let baseOp = opacityScale
         let warmWhite = Color(red: 1.0, green: 0.97, blue: 0.88)
 
         // Inner beam — concentrated
@@ -551,78 +561,84 @@ private struct HolySpotlight: View {
         let outerBotRight = CGPoint(x: pos.x + 80, y: pos.y + 30)
 
         ZStack {
-            // Wide outer wash — ethereal golden flood
-            Path { path in
-                path.move(to: outerTopLeft)
-                path.addLine(to: outerTopRight)
-                path.addLine(to: outerBotRight)
-                path.addLine(to: outerBotLeft)
-                path.closeSubpath()
-            }
-            .fill(
-                LinearGradient(
-                    colors: [
-                        color.opacity(beamBaseOp * 0.4),
-                        color.opacity(beamBaseOp * 0.25),
-                        color.opacity(beamBaseOp * 0.08),
-                        Color.clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
+            // drawingGroup flattens the 3 blurred paths into a single cached
+            // Metal texture. Since inputs are constant (no breathe), the texture
+            // is computed once. The caller's .opacity() just alpha-blends it.
+            Group {
+                // Wide outer wash — ethereal golden flood
+                Path { path in
+                    path.move(to: outerTopLeft)
+                    path.addLine(to: outerTopRight)
+                    path.addLine(to: outerBotRight)
+                    path.addLine(to: outerBotLeft)
+                    path.closeSubpath()
+                }
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            color.opacity(baseOp * 0.4),
+                            color.opacity(baseOp * 0.25),
+                            color.opacity(baseOp * 0.08),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
-            )
-            .blur(radius: 36)
+                .blur(radius: 36)
 
-            // Mid beam — warm golden cone
-            Path { path in
-                path.move(to: midTopLeft)
-                path.addLine(to: midTopRight)
-                path.addLine(to: midBotRight)
-                path.addLine(to: midBotLeft)
-                path.closeSubpath()
-            }
-            .fill(
-                LinearGradient(
-                    colors: [
-                        warmWhite.opacity(beamBaseOp * 0.5),
-                        color.opacity(beamBaseOp * 0.55),
-                        color.opacity(beamBaseOp * 0.20),
-                        Color.clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
+                // Mid beam — warm golden cone
+                Path { path in
+                    path.move(to: midTopLeft)
+                    path.addLine(to: midTopRight)
+                    path.addLine(to: midBotRight)
+                    path.addLine(to: midBotLeft)
+                    path.closeSubpath()
+                }
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            warmWhite.opacity(baseOp * 0.5),
+                            color.opacity(baseOp * 0.55),
+                            color.opacity(baseOp * 0.20),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
-            )
-            .blur(radius: 20)
+                .blur(radius: 20)
 
-            // Inner bright beam — white-hot core
-            Path { path in
-                path.move(to: topLeft)
-                path.addLine(to: topRight)
-                path.addLine(to: botRight)
-                path.addLine(to: botLeft)
-                path.closeSubpath()
-            }
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(beamBaseOp * 0.75),
-                        warmWhite.opacity(beamBaseOp * 0.65),
-                        color.opacity(beamBaseOp * 0.35),
-                        color.opacity(beamBaseOp * 0.10)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
+                // Inner bright beam — white-hot core
+                Path { path in
+                    path.move(to: topLeft)
+                    path.addLine(to: topRight)
+                    path.addLine(to: botRight)
+                    path.addLine(to: botLeft)
+                    path.closeSubpath()
+                }
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(baseOp * 0.75),
+                            warmWhite.opacity(baseOp * 0.65),
+                            color.opacity(baseOp * 0.35),
+                            color.opacity(baseOp * 0.10)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
-            )
-            .blur(radius: 10)
+                .blur(radius: 10)
+            }
+            .drawingGroup(opaque: false)
 
             // Blazing source glow at top — where the heavens open
             RadialGradient(
                 colors: [
-                    Color.white.opacity(beamBaseOp * 0.7),
-                    warmWhite.opacity(beamBaseOp * 0.5),
-                    color.opacity(beamBaseOp * 0.25),
+                    Color.white.opacity(baseOp * 0.7),
+                    warmWhite.opacity(baseOp * 0.5),
+                    color.opacity(baseOp * 0.25),
                     Color.clear
                 ],
                 center: UnitPoint(x: pos.x / screenSize.width, y: 0),
@@ -636,9 +652,9 @@ private struct HolySpotlight: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            Color.white.opacity(beamBaseOp * 0.5),
-                            warmWhite.opacity(beamBaseOp * 0.35),
-                            color.opacity(beamBaseOp * 0.15),
+                            Color.white.opacity(baseOp * 0.5),
+                            warmWhite.opacity(baseOp * 0.35),
+                            color.opacity(baseOp * 0.15),
                             Color.clear
                         ],
                         center: .center,
@@ -750,12 +766,14 @@ private final class NightingaleDustData: ObservableObject, @unchecked Sendable {
 private struct NightingaleDustCanvas: View {
     let color: Color
     let targetPosition: CGPoint
+    var isActive: Bool = true
 
     @StateObject private var system = NightingaleDustData()
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.animation(paused: !isActive)) { timeline in
             Canvas(rendersAsynchronously: false) { context, size in
+                guard isActive else { return }
                 system.update(
                     time: timeline.date.timeIntervalSinceReferenceDate,
                     center: targetPosition
@@ -926,143 +944,19 @@ private final class HolySparkData: ObservableObject, @unchecked Sendable {
 private struct HolySparkCanvas: View {
     let color: Color
     let targetPosition: CGPoint
+    var isActive: Bool = true
 
     @StateObject private var system = HolySparkData()
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.animation(paused: !isActive)) { timeline in
             Canvas(rendersAsynchronously: false) { context, size in
+                guard isActive else { return }
                 system.update(
                     time: timeline.date.timeIntervalSinceReferenceDate,
                     center: targetPosition
                 )
                 system.render(in: &context, goldColor: color)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
-
-// MARK: - Nightingale: Falling Rose Petals
-
-private struct RosePetal {
-    var x: CGFloat
-    var y: CGFloat
-    var size: CGFloat
-    var opacity: CGFloat
-    var speed: CGFloat
-    var swayPhase: CGFloat
-    var swayAmount: CGFloat
-    var rotation: CGFloat       // current rotation in radians
-    var rotationSpeed: CGFloat  // radians per second
-    var hue: CGFloat            // 0 = deep rose, 1 = soft pink
-}
-
-private final class RosePetalData: ObservableObject, @unchecked Sendable {
-    var petals: [RosePetal] = []
-    var lastTime: TimeInterval = 0
-    var initialized = false
-
-    func setup(center: CGPoint) {
-        guard !initialized else { return }
-        initialized = true
-        for _ in 0..<14 {
-            petals.append(Self.makePetal(center: center, randomY: true))
-        }
-    }
-
-    func update(time: TimeInterval, center: CGPoint) {
-        let dt = lastTime == 0 ? 0.016 : min(time - lastTime, 0.05)
-        lastTime = time
-
-        if !initialized { setup(center: center) }
-
-        for i in petals.indices {
-            // Fall downward
-            petals[i].y += petals[i].speed * CGFloat(dt)
-
-            // Graceful swaying drift
-            let sway = CGFloat(sin(time * 0.6 + Double(petals[i].swayPhase)))
-                * petals[i].swayAmount
-            petals[i].x = center.x + sway
-
-            // Tumbling rotation
-            petals[i].rotation += petals[i].rotationSpeed * CGFloat(dt)
-
-            // Fade as they fall
-            let travel = petals[i].y - center.y
-            let maxTravel: CGFloat = 130
-            if travel > maxTravel * 0.5 {
-                petals[i].opacity = max(0, petals[i].opacity - CGFloat(dt) * 0.4)
-            }
-
-            if petals[i].y > center.y + maxTravel || petals[i].opacity <= 0 {
-                petals[i] = Self.makePetal(center: center, randomY: false)
-            }
-        }
-    }
-
-    func render(in context: inout GraphicsContext) {
-        for petal in petals {
-            var ctx = context
-            ctx.translateBy(x: petal.x, y: petal.y)
-            ctx.rotate(by: Angle(radians: Double(petal.rotation)))
-
-            let w = petal.size
-            let h = petal.size * 1.6
-
-            // Petal color: blend between deep rose and soft pink
-            let r = 0.85 + Double(petal.hue) * 0.15
-            let g = 0.30 + Double(petal.hue) * 0.35
-            let b = 0.40 + Double(petal.hue) * 0.25
-            let petalColor = Color(red: r, green: g, blue: b)
-
-            let rect = CGRect(x: -w, y: -h, width: w * 2, height: h * 2)
-            ctx.fill(
-                Ellipse().path(in: rect),
-                with: .radialGradient(
-                    Gradient(colors: [
-                        petalColor.opacity(Double(petal.opacity)),
-                        petalColor.opacity(Double(petal.opacity) * 0.5),
-                        .clear
-                    ]),
-                    center: .zero,
-                    startRadius: 0,
-                    endRadius: max(w, h)
-                )
-            )
-        }
-    }
-
-    static func makePetal(center: CGPoint, randomY: Bool) -> RosePetal {
-        RosePetal(
-            x: center.x + .random(in: -55...55),
-            y: randomY ? center.y + .random(in: -80...40) : center.y - .random(in: 30...70),
-            size: .random(in: 3.0...6.0),
-            opacity: .random(in: 0.50...0.85),
-            speed: .random(in: 10...20),
-            swayPhase: .random(in: 0...(2 * .pi)),
-            swayAmount: .random(in: 20...48),
-            rotation: .random(in: 0...(2 * .pi)),
-            rotationSpeed: .random(in: -1.5...1.5),
-            hue: .random(in: 0...1)
-        )
-    }
-}
-
-private struct RosePetalCanvas: View {
-    let targetPosition: CGPoint
-
-    @StateObject private var system = RosePetalData()
-
-    var body: some View {
-        TimelineView(.animation) { timeline in
-            Canvas(rendersAsynchronously: false) { context, size in
-                system.update(
-                    time: timeline.date.timeIntervalSinceReferenceDate,
-                    center: targetPosition
-                )
-                system.render(in: &context)
             }
         }
         .allowsHitTesting(false)
@@ -1079,9 +973,11 @@ private struct HintLabel: View {
     let opacity: Double
     let yOffset: CGFloat
 
+    @ScaledMetric(relativeTo: .body) private var hintTextSize: CGFloat = 19
+
     var body: some View {
         Text(text)
-            .font(.system(size: 19, weight: .semibold, design: .serif))
+            .font(.system(size: hintTextSize, weight: .semibold, design: .serif))
             .italic()
             .foregroundStyle(gradient)
             .padding(.horizontal, 18)

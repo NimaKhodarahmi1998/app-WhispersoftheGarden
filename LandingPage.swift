@@ -221,6 +221,13 @@ struct LandingPage: View {
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
+    // Dynamic Type scaled base sizes (phone values — iPad uses multiplier)
+    @ScaledMetric(relativeTo: .title3) private var headingBase: CGFloat = 19
+    @ScaledMetric(relativeTo: .title3) private var buttonTextBase: CGFloat = 20
+    @ScaledMetric(relativeTo: .caption) private var quoteEnglishBase: CGFloat = 11
+    @ScaledMetric(relativeTo: .caption2) private var quotePersianBase: CGFloat = 9
+    @ScaledMetric(relativeTo: .caption2) private var quoteAttrBase: CGFloat = 7
+
     // Fade-in animation state
     @State private var showHeading = false
     @State private var showDivider = false
@@ -280,7 +287,7 @@ struct LandingPage: View {
 
                     // Heading
                     Text("Listen closely — the garden is whispering")
-                        .font(.custom("Didot", size: isIPad ? 28 : 19))
+                        .font(.custom("Didot", size: isIPad ? headingBase * 1.47 : headingBase))
                         .italic()
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
@@ -307,7 +314,7 @@ struct LandingPage: View {
                                 .frame(width: min(geometry.size.width * 0.8, 400))
 
                             Text("Enter Your Garden")
-                                .font(.custom("Palatino-Bold", size: isIPad ? 28 : 20))
+                                .font(.custom("Palatino-Bold", size: isIPad ? buttonTextBase * 1.4 : buttonTextBase))
                                 .tracking(isIPad ? 2 : 1.2)
                                 .foregroundStyle(
                                     LinearGradient(
@@ -345,7 +352,7 @@ struct LandingPage: View {
                                 .frame(width: min(geometry.size.width * 0.8, 400))
 
                             Text("Options")
-                                .font(.custom("Palatino-Bold", size: isIPad ? 28 : 20))
+                                .font(.custom("Palatino-Bold", size: isIPad ? buttonTextBase * 1.4 : buttonTextBase))
                                 .tracking(isIPad ? 2 : 1.2)
                                 .foregroundStyle(
                                     LinearGradient(
@@ -376,12 +383,12 @@ struct LandingPage: View {
                     // 4. Persian poetry quote — Hafez
                     VStack(spacing: 4) {
                         Text("Glad tidings — the days of sorrow shall not last")
-                            .font(.system(size: isIPad ? 14 : 11, design: .serif))
+                            .font(.system(size: isIPad ? quoteEnglishBase * 1.27 : quoteEnglishBase, design: .serif))
                             .italic()
                         Text("رسید مژده که ایام غم نخواهد ماند")
-                            .font(.system(size: isIPad ? 12 : 9))
+                            .font(.system(size: isIPad ? quotePersianBase * 1.33 : quotePersianBase))
                         Text("— Hafez")
-                            .font(.system(size: isIPad ? 10 : 7, design: .serif))
+                            .font(.system(size: isIPad ? quoteAttrBase * 1.43 : quoteAttrBase, design: .serif))
                     }
                     .foregroundColor(Color.white.opacity(0.3))
                     .multilineTextAlignment(.center)
@@ -393,6 +400,7 @@ struct LandingPage: View {
             }
             .ignoresSafeArea(edges: .all)
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         // 5. Sequential fade-in animations
         .onAppear {
             if reduceMotion {
@@ -432,6 +440,7 @@ struct LandingPage: View {
         class PlayerView: UIView {
             private var player: AVPlayer?
             private var playerLayer: AVPlayerLayer?
+            private var loopObserver: NSObjectProtocol?
 
             init(videoName: String, videoExt: String) {
                 super.init(frame: .zero)
@@ -452,12 +461,33 @@ struct LandingPage: View {
 
                 backgroundColor = UIColor(red: 10/255, green: 45/255, blue: 90/255, alpha: 1)
 
+                // Loop seamlessly
+                loopObserver = NotificationCenter.default.addObserver(
+                    forName: .AVPlayerItemDidPlayToEndTime,
+                    object: player.currentItem,
+                    queue: .main
+                ) { [weak player] _ in
+                    player?.seek(to: .zero)
+                    player?.play()
+                }
+
                 player.isMuted = true
                 player.play()
             }
 
             required init?(coder: NSCoder) {
                 fatalError("init(coder:) has not been implemented")
+            }
+
+            override func removeFromSuperview() {
+                if let observer = loopObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    loopObserver = nil
+                }
+                player?.pause()
+                playerLayer?.removeFromSuperlayer()
+                player = nil
+                super.removeFromSuperview()
             }
 
             override func layoutSubviews() {

@@ -8,6 +8,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var revealedPoemsStore = RevealedPoemsStore()
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     private let audio = GardenAudioEngine.shared
     @State private var showMainApp = false       // one-shot trigger from LandingPage
     @State private var showOptions = false
@@ -57,6 +58,16 @@ struct ContentView: View {
         .animation(nil, value: showMainApp)
         .onAppear {
             audio.startEngine()
+        }
+        .onChange(of: scenePhase) { newPhase in
+            switch newPhase {
+            case .active:
+                audio.startEngine()
+            case .background:
+                audio.stopEngine()
+            default:
+                break
+            }
         }
     }
 

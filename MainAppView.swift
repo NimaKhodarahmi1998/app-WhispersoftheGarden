@@ -26,17 +26,17 @@ struct MainAppView: View {
 
     var body: some View {
         ZStack {
-            // Content — garden stays alive, library overlays on top
+            // Garden — always alive, paused when off-screen
             GardenView(showMainApp: $showMainApp, isActive: selectedTab == 0 && showMainApp && !isTabTransitioning)
                 .opacity(selectedTab == 0 ? 1 : 0)
-                .allowsHitTesting(selectedTab == 0)
+                .allowsHitTesting(selectedTab == 0 && !isTabTransitioning)
 
-            if selectedTab == 1 {
-                NavigationStack {
-                    LibraryView(showMainApp: $showMainApp)
-                }
-                .transition(.opacity)
+            // Library — always alive (no creation spike on tab switch), paused when off-screen
+            NavigationStack {
+                LibraryView(showMainApp: $showMainApp, isActive: selectedTab == 1 && showMainApp && !isTabTransitioning)
             }
+            .opacity(selectedTab == 1 ? 1 : 0)
+            .allowsHitTesting(selectedTab == 1 && !isTabTransitioning)
 
             // Petal transition overlay — always in tree, paused when inactive
             PetalTransitionView(wind: windDirection, reduceMotion: reduceMotion, isActive: isTabTransitioning)
@@ -106,6 +106,7 @@ struct MainAppView: View {
 
     private func switchTab(to tab: Int) {
         guard tab != selectedTab && !isTabTransitioning else { return }
+        Haptics.tabSwitch()
 
         if reduceMotion {
             selectedTab = tab
@@ -120,10 +121,10 @@ struct MainAppView: View {
         audio.playSFX(.petalWhoosh)
 
         Task { @MainActor in
-            // Petals sweep in
-            try? await Task.sleep(for: .milliseconds(350))
+            // Petals sweep in — at 300ms they're at peak density
+            try? await Task.sleep(for: .milliseconds(300))
 
-            // Cross-fade underneath the petals
+            // Cross-fade underneath the petals (both views already in tree — just opacity)
             if let tab = pendingTab {
                 withAnimation(.easeInOut(duration: 0.4)) {
                     selectedTab = tab
@@ -131,8 +132,8 @@ struct MainAppView: View {
                 pendingTab = nil
             }
 
-            // Let petals finish their full animation
-            try? await Task.sleep(for: .milliseconds(1200))
+            // Let petals finish their animation
+            try? await Task.sleep(for: .milliseconds(900))
             isTabTransitioning = false
         }
     }

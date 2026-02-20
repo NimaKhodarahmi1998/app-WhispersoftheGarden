@@ -9,6 +9,10 @@
 import AVFoundation
 import Combine
 
+// @unchecked Sendable: iOS 16 View isn't @MainActor, so views access
+// GardenAudioEngine.shared from non-isolated context. Volume/isPlaying
+// properties are naturally atomic on ARM64. Audio graph mutations are
+// single-threaded (setUp called once from startEngine on main).
 final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
 
     static let shared = GardenAudioEngine()
@@ -153,15 +157,17 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
         let steps = 20
         let interval = duration / Double(steps)
         let startVolume = santur.volume
+        let savedVolume = musicVolume
+        let ref = santur  // capture strong reference — safe even if santur replaced
 
         Task { @MainActor in
             for step in 1...steps {
                 try? await Task.sleep(for: .milliseconds(Int(interval * 1000)))
                 let progress = Float(step) / Float(steps)
-                self.santur?.volume = startVolume * (1.0 - progress)
+                ref.volume = startVolume * (1.0 - progress)
             }
-            self.santur?.isPlaying = false
-            self.santur?.volume = self.musicVolume
+            ref.isPlaying = false
+            ref.volume = savedVolume
         }
     }
 

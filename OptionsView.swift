@@ -12,6 +12,8 @@ struct OptionsView: View {
     @EnvironmentObject var revealedPoemsStore: RevealedPoemsStore
     @ObservedObject private var audio = GardenAudioEngine.shared
 
+    @ScaledMetric(relativeTo: .body) private var settingLabelSize: CGFloat = 17
+
     private let gold = Color(red: 1.0, green: 0.92, blue: 0.65)
     private let darkGold = Color(red: 0.92, green: 0.78, blue: 0.48)
     private let deepBlue = Color(red: 0.03, green: 0.08, blue: 0.18)
@@ -101,7 +103,7 @@ struct OptionsView: View {
                 .frame(width: 28)
 
             Text(label)
-                .font(.system(size: 17, weight: .medium, design: .serif))
+                .font(.system(size: settingLabelSize, weight: .medium, design: .serif))
                 .foregroundColor(gold)
 
             Spacer()

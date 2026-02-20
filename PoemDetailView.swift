@@ -11,6 +11,10 @@ struct PoemDetailView: View {
     @EnvironmentObject var revealedPoemsStore: RevealedPoemsStore
     @State private var showShareSheet = false
 
+    @ScaledMetric(relativeTo: .caption) private var poetNameSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .title2) private var translationSize: CGFloat = 22
+    @ScaledMetric(relativeTo: .body) private var persianSize: CGFloat = 16
+
     private var poem: Poem { poems[currentIndex] }
 
     private let bgColor = Color(red: 0.02, green: 0.08, blue: 0.18)
@@ -90,7 +94,7 @@ struct PoemDetailView: View {
 
                 // Poet
                 Text(p.poet)
-                    .font(.system(size: 14, weight: .semibold, design: .serif))
+                    .font(.system(size: poetNameSize, weight: .semibold, design: .serif))
                     .foregroundStyle(rose.opacity(0.7))
                     .textCase(.uppercase)
                     .tracking(2)
@@ -108,7 +112,7 @@ struct PoemDetailView: View {
                         .tracking(1.5)
 
                     Text(p.english)
-                        .font(.system(size: 22, weight: .medium, design: .serif))
+                        .font(.system(size: translationSize, weight: .medium, design: .serif))
                         .italic()
                         .multilineTextAlignment(.center)
                         .foregroundStyle(gold)
@@ -134,7 +138,7 @@ struct PoemDetailView: View {
                         .tracking(1.5)
 
                     Text(p.persian)
-                        .font(.system(size: 16, weight: .medium, design: .serif))
+                        .font(.system(size: persianSize, weight: .medium, design: .serif))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.white.opacity(0.85))
                 }
