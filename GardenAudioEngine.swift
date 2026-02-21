@@ -39,6 +39,13 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
         }
     }
 
+    @Published var sfxVolume: Float {
+        didSet {
+            UserDefaults.standard.set(sfxVolume, forKey: "audio_sfxVolume")
+            sfxMixerNode?.outputVolume = sfxVolume
+        }
+    }
+
     // MARK: - Audio Graph
 
     private let engine = AVAudioEngine()
@@ -50,6 +57,7 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
     // SFX playback: 3 player nodes round-robin through a shared mixer
     private var sfxPlayers: [AVAudioPlayerNode] = []
     private var sfxPlayerIndex = 0
+    private var sfxMixerNode: AVAudioMixerNode?
     private var monoFmt: AVAudioFormat?
     private var cachedSampleRate: Double = 44100
 
@@ -70,10 +78,14 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
         if defaults.object(forKey: "audio_sfxEnabled") == nil {
             defaults.set(true, forKey: "audio_sfxEnabled")
         }
+        if defaults.object(forKey: "audio_sfxVolume") == nil {
+            defaults.set(Float(0.35), forKey: "audio_sfxVolume")
+        }
 
         self.isMusicEnabled = defaults.bool(forKey: "audio_musicEnabled")
         self.musicVolume = defaults.float(forKey: "audio_musicVolume")
         self.isSFXEnabled = defaults.bool(forKey: "audio_sfxEnabled")
+        self.sfxVolume = defaults.float(forKey: "audio_sfxVolume")
     }
 
     // MARK: - Lazy Setup (called once from startEngine)
@@ -123,10 +135,11 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
         reverb.wetDryMix = 40
 
         // SFX player nodes (3 for overlapping one-shot sounds)
-        // SFX gets its own sub-mixer at reduced volume so santur stays on top
+        // SFX gets its own sub-mixer at user-controlled volume
         let sfxMixer = AVAudioMixerNode()
         engine.attach(sfxMixer)
-        sfxMixer.outputVolume = 0.35  // SFX is a subtle layer beneath the santur
+        sfxMixer.outputVolume = sfxVolume
+        sfxMixerNode = sfxMixer
 
         for _ in 0..<3 {
             let player = AVAudioPlayerNode()

@@ -20,26 +20,28 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
+            // Landing page stays alive until cross-fade finishes
+            if landingVisible {
+                LandingPage(showMainApp: $showMainApp, showOptions: $showOptions)
+                    .environmentObject(revealedPoemsStore)
+                    .allowsHitTesting(!showOptions)
+            }
+
+            // Garden persists once created — only opacity changes
+            if gardenCreated {
+                MainAppView(showMainApp: $showGarden)
+                    .environmentObject(revealedPoemsStore)
+                    .opacity(gardenOpacity)
+                    .allowsHitTesting(gardenOpacity > 0)
+            }
+
+            // Petal overlay — always in tree, paused when inactive
+            PetalTransitionView(reduceMotion: reduceMotion, isActive: isTransitioning)
+
+            // Options overlays on top — landing page stays intact underneath
             if showOptions {
                 OptionsView(showOptions: $showOptions)
                     .environmentObject(revealedPoemsStore)
-            } else {
-                // Landing page stays alive until cross-fade finishes
-                if landingVisible {
-                    LandingPage(showMainApp: $showMainApp, showOptions: $showOptions)
-                        .environmentObject(revealedPoemsStore)
-                }
-
-                // Garden persists once created — only opacity changes
-                if gardenCreated {
-                    MainAppView(showMainApp: $showGarden)
-                        .environmentObject(revealedPoemsStore)
-                        .opacity(gardenOpacity)
-                        .allowsHitTesting(gardenOpacity > 0)
-                }
-
-                // Petal overlay — always in tree, paused when inactive
-                PetalTransitionView(reduceMotion: reduceMotion, isActive: isTransitioning)
             }
         }
         .onChange(of: showMainApp) { newValue in

@@ -41,6 +41,8 @@ class RevealedPoemsStore: ObservableObject {
         favoritePoemIDs.contains(poem.id)
     }
 
+    var favoritesCount: Int { favoritePoemIDs.count }
+
     private func loadFavorites() {
         guard let data = UserDefaults.standard.data(forKey: favoritesKey),
               let stringIDs = try? JSONDecoder().decode([String].self, from: data) else {

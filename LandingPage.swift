@@ -233,6 +233,7 @@ struct LandingPage: View {
     @State private var showDivider = false
     @State private var showButtons = false
     @State private var showQuote = false
+    @State private var buttonsInteractive = false
 
     var isIPad: Bool {
         horizontalSizeClass == .regular
@@ -340,6 +341,7 @@ struct LandingPage: View {
                     .accessibilityHint("Double tap to enter the garden")
                     .opacity(showButtons ? 1 : 0)
                     .offset(y: showButtons ? 0 : geometry.size.height * 0.012)
+                    .allowsHitTesting(buttonsInteractive)
                     .padding(.bottom, isIPad ? 22 : 16)
 
                     // Options button
@@ -379,6 +381,7 @@ struct LandingPage: View {
                     .accessibilityHint("Double tap to open settings")
                     .opacity(showButtons ? 1 : 0)
                     .offset(y: showButtons ? 0 : geometry.size.height * 0.012)
+                    .allowsHitTesting(buttonsInteractive)
 
                     Spacer()
 
@@ -404,25 +407,47 @@ struct LandingPage: View {
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         // 5. Sequential fade-in animations
-        .onAppear {
-            if reduceMotion {
+        .onAppear { playEntrance() }
+        .onChange(of: showOptions) { newValue in
+            // Options just dismissed — reset and replay entrance
+            if !newValue {
+                buttonsInteractive = false
+                showHeading = false
+                showDivider = false
+                showButtons = false
+                showQuote = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    playEntrance()
+                }
+            }
+        }
+    }
+
+    private func playEntrance() {
+        buttonsInteractive = false
+        if reduceMotion {
+            showHeading = true
+            showDivider = true
+            showButtons = true
+            showQuote = true
+            buttonsInteractive = true
+        } else {
+            withAnimation(.easeOut(duration: 0.7).delay(0.3)) {
                 showHeading = true
+            }
+            withAnimation(.easeOut(duration: 0.5).delay(0.7)) {
                 showDivider = true
+            }
+            withAnimation(.easeOut(duration: 0.6).delay(1.0)) {
                 showButtons = true
+            }
+            withAnimation(.easeOut(duration: 0.8).delay(1.5)) {
                 showQuote = true
-            } else {
-                withAnimation(.easeOut(duration: 0.7).delay(0.3)) {
-                    showHeading = true
-                }
-                withAnimation(.easeOut(duration: 0.5).delay(0.7)) {
-                    showDivider = true
-                }
-                withAnimation(.easeOut(duration: 0.6).delay(1.0)) {
-                    showButtons = true
-                }
-                withAnimation(.easeOut(duration: 0.8).delay(1.5)) {
-                    showQuote = true
-                }
+            }
+            // Enable interaction only after button animation finishes
+            // (1.0s delay + 0.6s duration = 1.6s)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) {
+                buttonsInteractive = true
             }
         }
     }

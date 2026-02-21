@@ -194,165 +194,61 @@ enum SFXBufferGen {
         return buf
     }
 
-    // MARK: - 3. Lotus Bloom (organic growth)
-    //
-    // A seed becoming a flower. The sound GROWS:
-    //  - Starts as a single quiet tone (the seed)
-    //  - Pitch slowly rises (reaching toward light)
-    //  - New voices enter one by one (petals opening)
-    //  - Detuning widens over time (the bloom spreading)
-    //  - Noise brightens as cutoff rises (the world opening up)
-    //  - Peaks at full complexity, then gently settles
+    // MARK: - 3. Lotus Bloom (silent — no sound on lotus appearance)
 
     private static func lotusBloom(sr: Double) -> [Float] {
-        let dur: Float = 3.0
-        let count = Int(Double(dur) * sr)
-        var buf = [Float](repeating: 0, count: count)
-        let dt = Float(1.0 / sr)
-
-        let startFreq = Float.random(in: 195...210)  // seed
-        let endFreq   = startFreq * 1.35              // ~major 4th up
-
-        // Voice 1 — the seed: enters immediately, rises in pitch
-        var ph1: Float = 0
-        for i in 0..<count {
-            let t = Float(i) / Float(sr)
-            let n = t / dur
-            let freq = startFreq + (endFreq - startFreq) * (1.0 - exp(-n * 2.5))
-            ph1 += twoPi * freq * dt
-            // Slow swell: 400ms attack, sustain, then gentle fade
-            let att = 1.0 - exp(-t / 0.4)
-            let rel: Float = t < 2.0 ? 1.0 : exp(-(t - 2.0) / 0.6)
-            buf[i] += 0.025 * att * rel * tanh(1.2 * sin(ph1))
-        }
-
-        // Voice 2 — first petal: enters at 0.4s, detuned and widening
-        var ph2: Float = Float.random(in: 0...twoPi)
-        let entry2: Float = 0.4
-        for i in 0..<count {
-            let t = Float(i) / Float(sr)
-            guard t > entry2 else { continue }
-            let lt = t - entry2
-            let n = t / dur
-            let freq = startFreq + (endFreq - startFreq) * (1.0 - exp(-n * 2.5))
-            // Detuning widens: 0.2 Hz at entry → 1.2 Hz at peak
-            let detune = 0.2 + 1.0 * min(1.0, lt / 2.0)
-            ph2 += twoPi * (freq + detune) * dt
-            let att = 1.0 - exp(-lt / 0.5)
-            let rel: Float = t < 2.2 ? 1.0 : exp(-(t - 2.2) / 0.5)
-            buf[i] += 0.02 * att * rel * tanh(1.2 * sin(ph2))
-        }
-
-        // Voice 3 — second petal: enters at 0.8s, opposite detune
-        var ph3: Float = Float.random(in: 0...twoPi)
-        let entry3: Float = 0.8
-        for i in 0..<count {
-            let t = Float(i) / Float(sr)
-            guard t > entry3 else { continue }
-            let lt = t - entry3
-            let n = t / dur
-            let freq = startFreq + (endFreq - startFreq) * (1.0 - exp(-n * 2.5))
-            let detune = -(0.2 + 0.8 * min(1.0, lt / 2.0))
-            ph3 += twoPi * (freq + detune) * dt
-            let att = 1.0 - exp(-lt / 0.6)
-            let rel: Float = t < 2.4 ? 1.0 : exp(-(t - 2.4) / 0.4)
-            buf[i] += 0.015 * att * rel * sin(ph3)
-        }
-
-        // Octave shimmer — enters at 1.2s (the bloom is fully open)
-        var ph4: Float = Float.random(in: 0...twoPi)
-        let entry4: Float = 1.2
-        for i in 0..<count {
-            let t = Float(i) / Float(sr)
-            guard t > entry4 else { continue }
-            let lt = t - entry4
-            let n = t / dur
-            let freq = startFreq + (endFreq - startFreq) * (1.0 - exp(-n * 2.5))
-            ph4 += twoPi * freq * 2.0 * dt
-            let att = 1.0 - exp(-lt / 0.8)
-            let rel: Float = t < 2.0 ? 1.0 : exp(-(t - 2.0) / 0.4)
-            buf[i] += 0.006 * att * rel * sin(ph4)
-        }
-
-        // Brightening breath — noise cutoff rises over time (world opening)
-        let pn = pinkNoise(count: count)
-        let blockSize = 512
-        var pos = 0
-        while pos < count {
-            let end = min(pos + blockSize, count)
-            let n = Float(pos) / Float(count)
-            // Cutoff rises from 150 Hz → 450 Hz (sound brightens with growth)
-            let cutoff = Double(150.0 + 300.0 * n)
-            var block = Array(pn[pos..<end])
-            lowpass(&block, cutoff: cutoff, sr: sr)
-            for j in 0..<block.count {
-                let gi = pos + j
-                let t = Float(gi) / Float(sr)
-                let att = 1.0 - exp(-t / 0.8)
-                let rel: Float = t < 2.0 ? 1.0 : exp(-(t - 2.0) / 0.6)
-                buf[gi] += 0.01 * att * rel * block[j]
-            }
-            pos = end
-        }
-
-        fade(&buf, fadeIn: 16, fadeOut: Int(0.15 * sr))
-        saturate(&buf, drive: 1.1)
-        return buf
+        return []
     }
 
-    // MARK: - 4. Poem Reveal (soft crystal chime)
+    // MARK: - 4. Poem Reveal (ascending harp arpeggio — Karplus-Strong)
     //
-    // A gentle felt-mallet strike on crystal — brief, warm, musical.
-    // Two slightly inharmonic modes (like a real bell/glass) with
-    // natural exponential ring-out. Soft raised-cosine excitation
-    // prevents any click. The sound is a clear, pleasant "event"
-    // rather than droning noise or sustained tone.
+    // Gentle ascending harp plucks using Karplus-Strong plucked-string
+    // synthesis. Five notes of a C-major pentatonic climb upward,
+    // each ~220ms apart. Soft double-lowpassed noise excitation
+    // (felt pluck), 3-sample averaging for extra smoothness.
 
     private static func poemReveal(sr: Double) -> [Float] {
-        let count = Int(1.2 * sr)
+        let dur: Float = 2.8
+        let count = Int(Double(dur) * sr)
         var buf = [Float](repeating: 0, count: count)
 
-        // Soft excitation pulse (raised-cosine, 25ms — felt mallet)
-        let pulseLen = Int(0.025 * sr)
-        var pulse = [Float](repeating: 0, count: count)
-        for i in 0..<min(pulseLen, count) {
-            pulse[i] = 0.5 * (1.0 - cos(twoPi * Float(i) / Float(pulseLen)))
+        let notes: [(freq: Float, onset: Float, amp: Float)] = [
+            (262 + .random(in: -2...2), 0.0,  0.035),
+            (330 + .random(in: -2...2), 0.22, 0.032),
+            (392 + .random(in: -2...2), 0.44, 0.028),
+            (440 + .random(in: -2...2), 0.66, 0.024),
+            (524 + .random(in: -2...2), 0.90, 0.018),
+        ]
+
+        for note in notes {
+            let startSample = Int(Double(note.onset) * sr)
+            let remaining = count - startSample
+            guard remaining > 0 else { continue }
+
+            let ksLen = Int(sr / Double(note.freq))
+            guard ksLen > 3 else { continue }
+
+            var ks = [Float](repeating: 0, count: ksLen)
+            for j in 0..<ksLen { ks[j] = Float.random(in: -1...1) }
+            lowpass(&ks, cutoff: Double(note.freq * 2.5), sr: sr)
+            lowpass(&ks, cutoff: Double(note.freq * 2.5), sr: sr)
+
+            let feedback: Float = 0.997
+            var ksPos = 0
+
+            for i in 0..<remaining {
+                let next = (ksPos + 1) % ksLen
+                let next2 = (ksPos + 2) % ksLen
+                let avg = (ks[ksPos] + ks[next] + ks[next2]) / 3.0
+                let sample = avg * feedback
+                ks[ksPos] = sample
+
+                buf[startSample + i] += note.amp * sample
+                ksPos = (ksPos + 1) % ksLen
+            }
         }
 
-        // Mode 1: Fundamental ~330 Hz (E4) — warm, round
-        let f1 = Float.random(in: 320...340)
-        let decay1: Float = 0.6 // longer ring
-        var phase1: Float = 0
-        for i in 0..<count {
-            let t = Float(i) / Float(sr)
-            phase1 += twoPi * f1 / Float(sr)
-            buf[i] += 0.03 * pulse[min(i, pulseLen - 1)] * sin(phase1)
-            buf[i] += 0.025 * exp(-t / decay1) * sin(phase1)
-        }
-
-        // Mode 2: ~528 Hz (slightly inharmonic — ratio 1.6, like a bell)
-        let f2 = f1 * Float.random(in: 1.58...1.62)
-        let decay2: Float = 0.4 // shorter ring than fundamental
-        var phase2: Float = 0
-        for i in 0..<count {
-            let t = Float(i) / Float(sr)
-            phase2 += twoPi * f2 / Float(sr)
-            buf[i] += 0.012 * pulse[min(i, pulseLen - 1)] * sin(phase2)
-            buf[i] += 0.01 * exp(-t / decay2) * sin(phase2)
-        }
-
-        // Mode 3: Sub-octave warmth ~165 Hz (very quiet, adds body)
-        let f3 = f1 * 0.5
-        let decay3: Float = 0.5
-        var phase3: Float = 0
-        for i in 0..<count {
-            let t = Float(i) / Float(sr)
-            phase3 += twoPi * f3 / Float(sr)
-            buf[i] += 0.008 * exp(-t / decay3) * sin(phase3)
-        }
-
-        fade(&buf, fadeIn: 4, fadeOut: Int(0.08 * sr))
-        saturate(&buf, drive: 1.1)
+        fade(&buf, fadeIn: 8, fadeOut: Int(0.12 * sr))
         return buf
     }
 
