@@ -482,12 +482,15 @@ struct GardenView: View {
     }
 
     private func handleTap(at location: CGPoint, in size: CGSize) {
-        // Block taps while another action is in progress
-        guard !showPoem, !showNightingaleCouplet,
-              !nightingaleInFlight, !showApproachFeather else { return }
-
         let normalized = CGPoint(x: location.x / size.width,
                                  y: location.y / size.height)
+
+        // Water ripple always fires, even during overlays
+        waterBridge.addRipple(at: normalized)
+
+        // Block gameplay taps while another action is in progress
+        guard !showPoem, !showNightingaleCouplet,
+              !nightingaleInFlight, !showApproachFeather else { return }
         let safePoint = pushInsidePool(normalized, margin: 0.07)
 
         // Remove oldest pad BEFORE finding spot, so we don't avoid a pad that's leaving
@@ -503,7 +506,6 @@ struct GardenView: View {
 
         let separated = findNonOverlappingSpot(near: safePoint, screenSize: size)
         createLilyPad(at: separated)
-        waterBridge.addRipple(at: normalized)
         audio.playSFX(.waterDrop)
         audio.playSFX(.lilyPadAppear)
         Haptics.waterTouch()
