@@ -19,6 +19,8 @@ struct Pad: Identifiable {
     var bobVelocity: CGFloat = 0
     var glowIntensity: CGFloat = 0
     var storedPoem: Poem?
+    var bloomDate: Date?
+    var lotusLifespan: TimeInterval = 0
 }
 
 struct Firefly: Identifiable {
@@ -46,6 +48,36 @@ private struct SavedPad: Codable {
     let phase: CGFloat
     let speed: CGFloat
     let storedPoemID: String?  // UUID string for lookup
+    let bloomDate: Date?
+    let lotusLifespan: TimeInterval
+
+    init(anchorX: CGFloat, anchorY: CGFloat, isLotus: Bool, movementStyle: MovementStyle,
+         phase: CGFloat, speed: CGFloat, storedPoemID: String?,
+         bloomDate: Date? = nil, lotusLifespan: TimeInterval = 0) {
+        self.anchorX = anchorX
+        self.anchorY = anchorY
+        self.isLotus = isLotus
+        self.movementStyle = movementStyle
+        self.phase = phase
+        self.speed = speed
+        self.storedPoemID = storedPoemID
+        self.bloomDate = bloomDate
+        self.lotusLifespan = lotusLifespan
+    }
+
+    // Backwards-compatible decoding: old saves lack bloomDate/lotusLifespan
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        anchorX = try c.decode(CGFloat.self, forKey: .anchorX)
+        anchorY = try c.decode(CGFloat.self, forKey: .anchorY)
+        isLotus = try c.decode(Bool.self, forKey: .isLotus)
+        movementStyle = try c.decode(MovementStyle.self, forKey: .movementStyle)
+        phase = try c.decode(CGFloat.self, forKey: .phase)
+        speed = try c.decode(CGFloat.self, forKey: .speed)
+        storedPoemID = try c.decodeIfPresent(String.self, forKey: .storedPoemID)
+        bloomDate = try c.decodeIfPresent(Date.self, forKey: .bloomDate)
+        lotusLifespan = (try? c.decode(TimeInterval.self, forKey: .lotusLifespan)) ?? 0
+    }
 }
 
 struct GardenView: View {
@@ -93,6 +125,7 @@ struct GardenView: View {
     @State private var nightingaleFlightOrigin: CGPoint = .zero
     @State private var nightingaleFlightDest: CGPoint = .zero
     @State private var nightingaleIsFlyingOut = false
+    @State private var nightingaleIsAutoDeparting = false
     @State private var nightingaleFlightStartTime: Date?
     @State private var nightingaleFlightDuration: TimeInterval = 2.2
 
@@ -113,6 +146,75 @@ struct GardenView: View {
         "A flutter of wings, drawing near\u{2026}",
         "The garden hums with anticipation\u{2026}",
     ]
+
+    private let autoDepartureWhispers = [
+        "The nightingale could not wait\u{2026}",
+        "It flew before you reached out\u{2026}",
+        "Patience is a garden\u{2019}s virtue\u{2026}",
+        "The song fades into the wind\u{2026}",
+    ]
+
+    /// Garden evolves based on how many poems have been revealed.
+    private var gardenStage: Int {
+        let count = revealedPoemsStore.revealedCount
+        if count >= 12 { return 4 }
+        if count >= 9  { return 3 }
+        if count >= 6  { return 2 }
+        if count >= 3  { return 1 }
+        return 0
+    }
+
+    /// Firefly count scales with garden memory stage.
+    private var gardenFireflyCount: Int {
+        switch gardenStage {
+        case 0: return 4
+        case 1: return 5
+        case 2: return 6
+        case 3: return 7
+        default: return 8
+        }
+    }
+
+    /// Warm overlay extra opacity from garden memory.
+    private var gardenWarmthBonus: Double {
+        switch gardenStage {
+        case 0: return 0.0
+        case 1: return 0.01
+        case 2: return 0.02
+        case 3: return 0.03
+        default: return 0.04
+        }
+    }
+
+    /// Auto-ripple interval range narrows as garden grows.
+    private var autoRippleInterval: ClosedRange<Double> {
+        switch gardenStage {
+        case 0, 1: return 8.0...15.0
+        case 2:    return 6.0...12.0
+        default:   return 5.0...10.0
+        }
+    }
+
+    // Autonomous ripple state
+    @State private var nextAutoRippleTime: TimeInterval = 0
+    @State private var autoRippleBurstCount: Int = 0
+
+    // Garden memory — petal burst timer for max stage
+    @State private var nextAutoPetalTime: TimeInterval = 0
+
+    // Long-press contemplation
+    @State private var longPressStartTime: Date?
+    @State private var longPressLocation: CGPoint = .zero
+    @State private var isLongPressing: Bool = false
+    @State private var longPressRippleCount: Int = 0
+    @State private var longPressGlowOpacity: Double = 0
+    @State private var hasShownLongPressHint: Bool = false
+    @State private var longPressWhisperOpacity: Double = 0
+    @State private var longPressWhisperText: String = ""
+
+    // Variable nightingale timing
+    @State private var nightingaleThreshold: Int = 3
+    @State private var nightingalePerchDeadline: Date?
 
     // Hint system
     @StateObject private var hintStore = GardenHintStore()
@@ -143,7 +245,7 @@ struct GardenView: View {
                     .ignoresSafeArea()
 
                 Color(red: 1.0, green: 0.95, blue: 0.85)
-                    .opacity(0.08 + breathingIntensity * 0.02)
+                    .opacity(0.08 + breathingIntensity * 0.02 + gardenWarmthBonus)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
 
@@ -167,15 +269,93 @@ struct GardenView: View {
                 PoolWaterHitShape()
                     .fill(.clear)
                     .contentShape(PoolWaterHitShape())
-                    .onTapGesture { location in
-                        handleTap(at: location, in: geo.size)
-                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                if longPressStartTime == nil {
+                                    longPressStartTime = Date()
+                                    longPressLocation = value.location
+                                    isLongPressing = true
+                                    longPressRippleCount = 0
+                                    longPressGlowOpacity = 0
+                                }
+                            }
+                            .onEnded { _ in
+                                guard let start = longPressStartTime else { return }
+                                let holdDuration = Date().timeIntervalSince(start)
+                                let location = longPressLocation
+                                longPressStartTime = nil
+                                isLongPressing = false
+                                withAnimation(.easeOut(duration: 0.4)) {
+                                    longPressGlowOpacity = 0
+                                }
+
+                                if holdDuration < 1.5 {
+                                    // Short tap — existing behavior
+                                    handleTap(at: location, in: geo.size)
+                                } else {
+                                    // Long-press contemplation
+                                    handleLongPressRelease(at: location, in: geo.size)
+                                }
+                            }
+                    )
                     .accessibilityLabel("Garden pool")
-                    .accessibilityHint("Double tap to create a lily pad")
+                    .accessibilityHint("Double tap to create a lily pad. Long press for contemplation.")
                     .accessibilityAddTraits(.isButton)
+
+                // Long-press golden glow
+                if isLongPressing {
+                    RadialGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.92, blue: 0.65).opacity(longPressGlowOpacity * 0.3),
+                            Color(red: 1.0, green: 0.85, blue: 0.45).opacity(longPressGlowOpacity * 0.15),
+                            Color.clear
+                        ],
+                        center: UnitPoint(
+                            x: longPressLocation.x / geo.size.width,
+                            y: longPressLocation.y / geo.size.height
+                        ),
+                        startRadius: 0,
+                        endRadius: geo.size.width * 0.2
+                    )
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                }
 
                 ForEach(pads) { pad in
                     renderPad(pad, in: geo.size)
+                }
+
+                // Garden hints — pool & lily pad (tutorial + post-tutorial invitations)
+                if hintVisible,
+                   !showPoem, !showNightingaleCouplet,
+                   !showApproachFeather, !showApproachWhisper {
+
+                    // Tutorial: show the current active hint (non-nightingale)
+                    if let stage = hintStore.activeHint, stage != .tapNightingale {
+                        let pos = hintPosition(for: stage, in: geo.size)
+                        GardenHintView(
+                            stage: stage,
+                            targetPosition: pos,
+                            screenSize: geo.size,
+                            reduceMotion: reduceMotion,
+                            mode: .tutorial
+                        )
+                        .allowsHitTesting(false)
+                    }
+                    // Post-tutorial invitations (pool/lily pad only — nightingale handled below)
+                    else if !showNightingale,
+                            let inv = invitationStage(in: geo.size),
+                            inv.stage != .tapNightingale {
+                        GardenHintView(
+                            stage: inv.stage,
+                            targetPosition: inv.position,
+                            screenSize: geo.size,
+                            reduceMotion: reduceMotion,
+                            mode: .invitation
+                        )
+                        .allowsHitTesting(false)
+                    }
                 }
 
                 // Nightingale hint glow — rendered BEHIND the bird so it looks backlit
@@ -234,36 +414,6 @@ struct GardenView: View {
                         .position(firefly.position)
                 }
 
-                // Garden hints — tutorial (non-nightingale; nightingale renders behind the bird)
-                if let stage = hintStore.activeHint, hintVisible,
-                   stage != .tapNightingale,
-                   !showApproachFeather, !showApproachWhisper {
-                    GardenHintView(
-                        stage: stage,
-                        targetPosition: hintPosition(for: stage, in: geo.size),
-                        screenSize: geo.size,
-                        reduceMotion: reduceMotion,
-                        mode: .tutorial
-                    )
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-                }
-
-                // Garden hints — persistent invitation glow (non-nightingale)
-                // Hidden when nightingale is present — its own hint takes over
-                if let invitation = invitationStage(in: geo.size), hintVisible,
-                   invitation.stage != .tapNightingale, !showNightingale {
-                    GardenHintView(
-                        stage: invitation.stage,
-                        targetPosition: invitation.position,
-                        screenSize: geo.size,
-                        reduceMotion: reduceMotion,
-                        mode: .invitation
-                    )
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-                }
-
                 if let poem = currentPoem {
                     Color.black.opacity(showPoem ? 0.4 : 0)
                         .ignoresSafeArea()
@@ -276,7 +426,7 @@ struct GardenView: View {
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                     currentPoem = nil
-                                    if poolPoemsSinceNightingale >= 3 && !showNightingale && !nightingaleInFlight {
+                                    if poolPoemsSinceNightingale >= nightingaleThreshold && !showNightingale && !nightingaleInFlight {
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                             guard !nightingaleInFlight, !showNightingale else { return }
                                             nightingaleFlyIn()
@@ -291,7 +441,7 @@ struct GardenView: View {
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                                     currentPoem = nil
-                                    if poolPoemsSinceNightingale >= 3 && !showNightingale && !nightingaleInFlight {
+                                    if poolPoemsSinceNightingale >= nightingaleThreshold && !showNightingale && !nightingaleInFlight {
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                             guard !nightingaleInFlight, !showNightingale else { return }
                                             nightingaleFlyIn()
@@ -376,6 +526,16 @@ struct GardenView: View {
                     .position(x: geo.size.width * 0.5, y: geo.size.height * 0.42)
                     .allowsHitTesting(false)
 
+                // Long-press discovery whisper
+                Text(longPressWhisperText)
+                    .font(.system(size: whisperSize, weight: .light, design: .serif))
+                    .italic()
+                    .foregroundColor(Color(red: 0.85, green: 0.92, blue: 1.0))
+                    .shadow(color: .black.opacity(0.8), radius: 8)
+                    .opacity(longPressWhisperOpacity)
+                    .position(x: geo.size.width * 0.5, y: geo.size.height * 0.55)
+                    .allowsHitTesting(false)
+
                 // Golden feather + whisper — nightingale approaching hint
                 if showApproachFeather || showApproachWhisper {
                     nightingaleApproachHintView(in: geo.size)
@@ -390,8 +550,20 @@ struct GardenView: View {
         .onAppear {
             loadGardenState()
 
-            for _ in 0..<4 {
+            for _ in 0..<gardenFireflyCount {
                 spawnFirefly(screenSize: UIScreen.main.bounds.size, randomY: true)
+            }
+
+            // Initialize auto-ripple timer
+            nextAutoRippleTime = time + Double.random(in: autoRippleInterval)
+            // Initialize auto-petal timer (only fires at max stage)
+            nextAutoPetalTime = time + Double.random(in: 45.0...60.0)
+
+            // Nightingale chirp on app open at max garden stage (all poems + 6+ couplets)
+            if gardenStage >= 4 && revealedPoemsStore.revealedNightingaleCount >= 6 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                    audio.playSFX(.nightingaleChirp)
+                }
             }
 
             // Show hints after a short delay so the scene establishes first
@@ -417,11 +589,67 @@ struct GardenView: View {
             time += dt
             updatePads(dt: dt)
 
+            // Autonomous ripples — the garden breathes
+            if !reduceMotion && time >= nextAutoRippleTime {
+                let ripplePoint = randomPointInPool()
+                waterBridge.addRipple(at: ripplePoint)
+
+                // 30% chance nearby pads bob gently
+                if Double.random(in: 0...1) < 0.3 {
+                    bobNearbyPads(tapLocation: ripplePoint, strength: 0.4)
+                }
+
+                if autoRippleBurstCount > 0 {
+                    // Burst mode: quick follow-up ripples (0.8-1.5s apart)
+                    autoRippleBurstCount -= 1
+                    nextAutoRippleTime = time + Double.random(in: 0.8...1.5)
+                } else {
+                    // Schedule next ripple; 15% chance of a breeze burst (2-3 quick ripples)
+                    nextAutoRippleTime = time + Double.random(in: autoRippleInterval)
+                    if Double.random(in: 0...1) < 0.15 {
+                        autoRippleBurstCount = Int.random(in: 1...2)
+                    }
+                }
+            }
+
+            // Spontaneous petal bursts at max garden stage
+            if gardenStage >= 4 && time >= nextAutoPetalTime {
+                petalBurst += 1
+                nextAutoPetalTime = time + Double.random(in: 45.0...60.0)
+            }
+
             if reduceMotion {
                 breathingIntensity = 0.5
             } else {
                 breathingIntensity = sin(time * 0.3) * 0.5 + 0.5
                 updateFireflies(dt: dt, screenSize: UIScreen.main.bounds.size)
+            }
+
+            // Long-press: slow ripples during hold + glow build
+            if isLongPressing, let start = longPressStartTime, !reduceMotion {
+                let held = now.timeIntervalSince(start)
+                // Slow ripples every ~0.8s after 0.3s initial delay
+                let rippleIndex = max(0, Int((held - 0.3) / 0.8))
+                if rippleIndex > longPressRippleCount {
+                    longPressRippleCount = rippleIndex
+                    let normalized = CGPoint(
+                        x: longPressLocation.x / UIScreen.main.bounds.size.width,
+                        y: longPressLocation.y / UIScreen.main.bounds.size.height
+                    )
+                    waterBridge.addRipple(at: normalized)
+                }
+                // Glow builds from 0 to 1 over 1.5s
+                let glowProgress = min(1.0, held / 1.5)
+                longPressGlowOpacity = glowProgress * glowProgress // ease-in
+            }
+
+            // Nightingale auto-departure — flies away if not tapped in time
+            // Defer if an overlay is showing (poem, couplet, feather) — don't depart behind UI
+            if nightingaleIsPerched, showNightingale, !nightingaleInFlight,
+               !showPoem, !showNightingaleCouplet, !showApproachFeather,
+               let deadline = nightingalePerchDeadline, now >= deadline {
+                nightingalePerchDeadline = nil
+                handleNightingaleAutoDeparture(in: UIScreen.main.bounds.size)
             }
 
             // Timer-driven bounding flight — updated every frame
@@ -515,6 +743,74 @@ struct GardenView: View {
         hintStore.markPoolTappedAgain()
         hintStore.markPoolTappedThrice()
         saveGardenState()
+    }
+
+    /// Long-press contemplation — "Still Water Runs Deep"
+    private func handleLongPressRelease(at location: CGPoint, in size: CGSize) {
+        let normalized = CGPoint(x: location.x / size.width,
+                                 y: location.y / size.height)
+
+        // Block during overlays
+        guard !showPoem, !showNightingaleCouplet,
+              !nightingaleInFlight, !showApproachFeather else { return }
+
+        let lotusCount = pads.filter(\.isLotus).count
+
+        if lotusCount <= 1 {
+            // Few/no lotuses: creates a lily pad (gentleTap SFX instead of waterDrop)
+            let safePoint = pushInsidePool(normalized, margin: 0.07)
+
+            if pads.count >= 5 {
+                if reduceMotion {
+                    pads.removeFirst()
+                } else {
+                    _ = withAnimation(.easeOut(duration: 0.3)) {
+                        pads.removeFirst()
+                    }
+                }
+            }
+
+            let separated = findNonOverlappingSpot(near: safePoint, screenSize: size)
+            createLilyPad(at: separated)
+            audio.playSFX(.gentleTap)
+            Haptics.waterTouch()
+            bobNearbyPads(tapLocation: normalized, strength: 0.6)
+            hintStore.markPoolTapped()
+            saveGardenState()
+
+        } else if lotusCount <= 3 {
+            // 2-3 lotuses: existing lotuses pulse glow simultaneously, whisperTone plays
+            audio.playSFX(.whisperTone)
+            for i in pads.indices where pads[i].isLotus {
+                pads[i].glowIntensity = 0.8
+            }
+            waterBridge.addRipple(at: normalized)
+
+        } else {
+            // 4+ lotuses: lotuses glow + fireflies drift toward hold point for 2s
+            audio.playSFX(.whisperTone)
+            for i in pads.indices where pads[i].isLotus {
+                pads[i].glowIntensity = 1.0
+            }
+            waterBridge.addRipple(at: normalized)
+            petalBurst += 1
+
+            // Fireflies gravitate toward hold point briefly
+            let holdScreenPos = location
+            for i in fireflies.indices {
+                let dx = holdScreenPos.x - fireflies[i].position.x
+                let dy = holdScreenPos.y - fireflies[i].position.y
+                fireflies[i].drift += dx * 0.003
+                fireflies[i].speed -= dy * 0.001
+            }
+            // Reset drift after 2s
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                for i in fireflies.indices {
+                    fireflies[i].drift = CGFloat.random(in: -0.4...0.4)
+                    fireflies[i].speed = CGFloat.random(in: 0.15...0.35)
+                }
+            }
+        }
     }
 
     /// Nudges a point toward the pool center until it's `margin` inside every edge.
@@ -688,6 +984,29 @@ struct GardenView: View {
                     pads[index].phase = CGFloat.random(in: 0...(2 * .pi))
                 }
             }
+
+            // Lotus decay — nothing lasts forever
+            if pads[index].isLotus, let bloom = pads[index].bloomDate {
+                let age = Date().timeIntervalSince(bloom)
+                let lifespan = pads[index].lotusLifespan
+                let remaining = lifespan - age
+
+                if remaining <= 0 {
+                    // Revert to lily pad
+                    pads[index].isLotus = false
+                    pads[index].bloomDate = nil
+                    pads[index].glowIntensity = 0
+                    pads[index].storedPoem = revealedPoemsStore.getNextPoem()
+                    // Silent ripple + gentle bob on decay
+                    waterBridge.addRipple(at: pads[index].anchor)
+                    pads[index].bobVelocity = -1.5
+                    saveGardenState()
+                } else if remaining <= 30 {
+                    // Glow dims over last 30s
+                    let dimFactor = CGFloat(remaining / 30.0)
+                    pads[index].glowIntensity = min(pads[index].glowIntensity, 0.4 * dimFactor)
+                }
+            }
         }
     }
 
@@ -723,8 +1042,15 @@ struct GardenView: View {
 
         pads[index].isLotus = true
         pads[index].glowIntensity = 1.0
+        pads[index].bloomDate = Date()
+        pads[index].lotusLifespan = TimeInterval.random(in: 90...120)
         audio.playSFX(.lotusBloom)
         Haptics.lotusBloom()
+
+        // Lotus Resonance Cascade — existing lotuses respond nearest-first
+        if !reduceMotion {
+            triggerLotusResonance(newLotusIndex: index)
+        }
 
         if let poem = pads[index].storedPoem {
             currentPoem = poem
@@ -750,14 +1076,91 @@ struct GardenView: View {
 
         poolPoemsSinceNightingale += 1
         saveGardenState()
+
+        // Long-press discovery: show once when 2+ lotuses exist and tutorial is done
+        checkLongPressDiscoveryHint()
     }
 
-    private func bobNearbyPads(tapLocation: CGPoint) {
+    /// Shows a one-time whisper hinting at the long-press mechanic.
+    private func checkLongPressDiscoveryHint() {
+        guard !hasShownLongPressHint,
+              hintStore.isTutorialComplete,
+              pads.filter(\.isLotus).count >= 2 else { return }
+
+        hasShownLongPressHint = true
+        UserDefaults.standard.set(true, forKey: Self.longPressHintShownKey)
+
+        let whispers = [
+            "Still water runs deep\u{2026} try holding the surface\u{2026}",
+            "Linger on the water\u{2026} patience reveals more\u{2026}",
+        ]
+        longPressWhisperText = whispers.randomElement()!
+
+        // Delay so it appears after the poem overlay is dismissed
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
+            withAnimation(.easeIn(duration: 1.2)) {
+                longPressWhisperOpacity = 1.0
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 14.0) {
+            withAnimation(.easeOut(duration: 1.5)) {
+                longPressWhisperOpacity = 0
+            }
+        }
+    }
+
+    /// Lotus resonance: existing lotuses glow in sequence nearest-first, each triggers a ripple.
+    /// If ALL pads become lotuses, triggers a full bloom moment.
+    private func triggerLotusResonance(newLotusIndex: Int) {
+        let newPos = pads[newLotusIndex].anchor
+        let screenSize = UIScreen.main.bounds.size
+
+        // Collect other lotuses sorted by distance to the new one
+        var otherLotuses: [(index: Int, dist: CGFloat)] = []
+        for i in pads.indices where i != newLotusIndex && pads[i].isLotus {
+            let d = pixelDistance(newPos, pads[i].anchor, screenSize: screenSize)
+            otherLotuses.append((i, d))
+        }
+        otherLotuses.sort { $0.dist < $1.dist }
+
+        // Glow pulses outward with 0.3s delay per hop
+        for (hop, entry) in otherLotuses.enumerated() {
+            let delay = 0.3 * Double(hop + 1)
+            let idx = entry.index
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard idx < pads.count else { return }
+                pads[idx].glowIntensity = 0.7
+                waterBridge.addRipple(at: pads[idx].anchor)
+            }
+        }
+
+        // Full bloom moment: ALL pads are now lotuses (4+ pads)
+        let allLotus = pads.count >= 4 && pads.allSatisfy({ $0.isLotus })
+        if allLotus {
+            let totalDelay = 0.3 * Double(otherLotuses.count + 1)
+            DispatchQueue.main.asyncAfter(deadline: .now() + totalDelay) {
+                petalBurst += 3
+                audio.playSFX(.whisperTone)
+                // Brighten all fireflies briefly
+                for i in fireflies.indices {
+                    fireflies[i].baseOpacity = min(1.0, fireflies[i].baseOpacity + 0.3)
+                }
+                // Dim them back after 3s
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    for i in fireflies.indices {
+                        fireflies[i].baseOpacity = Double.random(in: 0.4...0.7)
+                    }
+                }
+            }
+        }
+    }
+
+    private func bobNearbyPads(tapLocation: CGPoint, strength: CGFloat = 1.0) {
         for index in pads.indices {
             let dist = distance(pads[index].anchor, tapLocation)
             if dist < 0.2 {
-                let strength = (0.2 - dist) / 0.2
-                pads[index].bobVelocity = -3.0 * strength
+                let proximity = (0.2 - dist) / 0.2
+                pads[index].bobVelocity = -3.0 * proximity * strength
             }
         }
     }
@@ -785,6 +1188,7 @@ struct GardenView: View {
             nightingaleIsPerched = true
             nightingaleAppearOpacity = 1
             nightingaleGlowOpacity = 1
+            nightingalePerchDeadline = Date().addingTimeInterval(Double.random(in: 25...35))
         } else {
             // Instant swap — nightingale vignette replaces non-nightingale in same frame
             showNightingale = true
@@ -815,6 +1219,8 @@ struct GardenView: View {
         audio.playSFX(.wingDeparture)
         Haptics.nightingaleTap()
         nightingaleIsPerched = false
+        nightingalePerchDeadline = nil
+        nightingaleIsAutoDeparting = false
 
         // Fade out holy light as the bird takes off
         withAnimation(.easeOut(duration: 0.6)) {
@@ -849,7 +1255,7 @@ struct GardenView: View {
     }
 
     private func checkNightingaleApproachHint() {
-        guard poolPoemsSinceNightingale == 2,
+        guard poolPoemsSinceNightingale == nightingaleThreshold - 1,
               !showApproachFeather else { return }
 
         // Pick approach whisper for this cycle
@@ -1187,6 +1593,8 @@ struct GardenView: View {
         }
         nightingaleIsPerched = true
         poolPoemsSinceNightingale = 0
+        nightingalePerchDeadline = nil
+        rollNightingaleThreshold()
         saveGardenState()
 
         // After effects fade out, instant swap back to non-nightingale invitation
@@ -1205,6 +1613,86 @@ struct GardenView: View {
                 nightingaleWhisperOpacity = 0
             }
         }
+    }
+
+    /// Nightingale auto-departure — it flies away on its own if not tapped in time.
+    private func handleNightingaleAutoDeparture(in size: CGSize) {
+        guard nightingaleIsPerched, showNightingale, !nightingaleInFlight else { return }
+
+        audio.playSFX(.wingDeparture)
+        nightingaleIsPerched = false
+
+        // Fade out holy light
+        withAnimation(.easeOut(duration: 0.6)) {
+            nightingaleGlowOpacity = 0
+        }
+
+        let startPos = nightingalePosition
+        let flyOutRight = startPos.x < 0.5
+        let exitX: CGFloat = flyOutRight ? 1.15 : -0.15
+        nightingaleFacingRight = flyOutRight
+
+        nightingaleIsAutoDeparting = true
+
+        if reduceMotion {
+            nightingaleAppearOpacity = 0
+            finishAutoDeparture()
+        } else {
+            nightingaleIsFlyingOut = true
+            nightingaleFlightOrigin = startPos
+            nightingaleFlightDest = CGPoint(x: exitX, y: startPos.y - 0.08)
+            nightingaleFlightT = 0
+            nightingaleFlightDuration = 2.2
+            nightingaleFlightStartTime = Date()
+            nightingaleInFlight = true
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+                withAnimation(.easeIn(duration: 1.1)) {
+                    nightingaleAppearOpacity = 0
+                }
+            }
+        }
+    }
+
+    /// Called when auto-departure flight completes (no bonus couplet).
+    private func finishAutoDeparture() {
+        nightingaleIsPerched = true
+        poolPoemsSinceNightingale = 0
+        rollNightingaleThreshold()
+        saveGardenState()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            showNightingale = false
+        }
+
+        // Special departure whisper
+        currentDepartureWhisper = autoDepartureWhispers[
+            nightingaleCoupletIndex % autoDepartureWhispers.count
+        ]
+        withAnimation(.easeIn(duration: 0.8)) {
+            nightingaleWhisperOpacity = 1.0
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+            withAnimation(.easeOut(duration: 1.2)) {
+                nightingaleWhisperOpacity = 0
+            }
+        }
+    }
+
+    /// Randomizes next nightingale threshold (2-5, weighted toward 3).
+    private func rollNightingaleThreshold() {
+        // Weighted: 3 appears 40%, 2 and 4 each 25%, 5 appears 10%
+        let roll = Double.random(in: 0...1)
+        if roll < 0.25 {
+            nightingaleThreshold = 2
+        } else if roll < 0.65 {
+            nightingaleThreshold = 3
+        } else if roll < 0.90 {
+            nightingaleThreshold = 4
+        } else {
+            nightingaleThreshold = 5
+        }
+        UserDefaults.standard.set(nightingaleThreshold, forKey: Self.nightingaleThresholdKey)
     }
 
     // MARK: - Nightingale Sprite (computed position/rotation during flight)
@@ -1379,7 +1867,12 @@ struct GardenView: View {
         nightingaleFlightStartTime = nil
 
         if nightingaleIsFlyingOut {
-            showBonusCouplet()
+            if nightingaleIsAutoDeparting {
+                nightingaleIsAutoDeparting = false
+                finishAutoDeparture()
+            } else {
+                showBonusCouplet()
+            }
         } else {
             // Landing: slight downward bob from weight, then spring settle
             let dest = nightingaleFlightDest
@@ -1397,6 +1890,8 @@ struct GardenView: View {
                 nightingaleIsPerched = true
                 petalBurst += 1
                 audio.playSFX(.nightingaleChirp)
+                // Set auto-departure deadline (25-35s)
+                nightingalePerchDeadline = Date().addingTimeInterval(Double.random(in: 25...35))
             }
         }
     }
@@ -1448,7 +1943,7 @@ struct GardenView: View {
             return (.tapNightingale, hintPosition(for: .tapNightingale, in: size))
         }
         // Suppress pool/lily invitation when nightingale arrival is imminent or in flight
-        guard !nightingaleInFlight, poolPoemsSinceNightingale < 3 else { return nil }
+        guard !nightingaleInFlight, poolPoemsSinceNightingale < nightingaleThreshold else { return nil }
         if pads.contains(where: { !$0.isLotus }) {
             return (.tapLilyPad, hintPosition(for: .tapLilyPad, in: size))
         }
@@ -1627,6 +2122,8 @@ struct GardenView: View {
     private static let nightingaleCoupletIndexKey = "garden_nightingale_couplet_index"
     private static let poolPoemsSinceNightingaleKey = "garden_pool_poems_since_nightingale"
     private static let nightingalePerchIndexKey = "garden_nightingale_perch_index"
+    private static let nightingaleThresholdKey = "garden_nightingale_threshold"
+    private static let longPressHintShownKey = "garden_long_press_hint_shown"
 
     private func saveGardenState() {
         let saved = pads.map { pad in
@@ -1637,7 +2134,9 @@ struct GardenView: View {
                 movementStyle: pad.movementStyle,
                 phase: pad.phase,
                 speed: pad.speed,
-                storedPoemID: pad.storedPoem?.id.uuidString
+                storedPoemID: pad.storedPoem?.id.uuidString,
+                bloomDate: pad.bloomDate,
+                lotusLifespan: pad.lotusLifespan
             )
         }
         if let data = try? JSONEncoder().encode(saved) {
@@ -1646,6 +2145,7 @@ struct GardenView: View {
         UserDefaults.standard.set(nightingaleCoupletIndex, forKey: Self.nightingaleCoupletIndexKey)
         UserDefaults.standard.set(poolPoemsSinceNightingale, forKey: Self.poolPoemsSinceNightingaleKey)
         UserDefaults.standard.set(nightingalePerchIndex, forKey: Self.nightingalePerchIndexKey)
+        UserDefaults.standard.set(nightingaleThreshold, forKey: Self.nightingaleThresholdKey)
     }
 
     private func loadGardenState() {
@@ -1653,6 +2153,13 @@ struct GardenView: View {
         nightingaleCoupletIndex = UserDefaults.standard.integer(forKey: Self.nightingaleCoupletIndexKey)
         poolPoemsSinceNightingale = UserDefaults.standard.integer(forKey: Self.poolPoemsSinceNightingaleKey)
         nightingalePerchIndex = UserDefaults.standard.integer(forKey: Self.nightingalePerchIndexKey)
+
+        // Restore variable nightingale threshold (default 3 if not set)
+        let savedThreshold = UserDefaults.standard.integer(forKey: Self.nightingaleThresholdKey)
+        nightingaleThreshold = (savedThreshold >= 2 && savedThreshold <= 5) ? savedThreshold : 3
+
+        // Restore long-press hint flag
+        hasShownLongPressHint = UserDefaults.standard.bool(forKey: Self.longPressHintShownKey)
 
         // Restore pads
         guard let data = UserDefaults.standard.data(forKey: Self.gardenPadsKey),
@@ -1670,14 +2177,35 @@ struct GardenView: View {
             let poem: Poem? = saved.storedPoemID.flatMap { poemByID[$0] }
             // Drop non-lotus pads whose poem was removed (they'd do nothing on tap)
             if !saved.isLotus && poem == nil { return nil }
+
+            // Check if lotus should have decayed while app was closed
+            var isLotus = saved.isLotus
+            var bloomDate = saved.bloomDate
+            var lotusLifespan = saved.lotusLifespan
+            var restoredPoem = poem
+
+            if isLotus, let bloom = bloomDate {
+                let age = Date().timeIntervalSince(bloom)
+                if age >= lotusLifespan {
+                    // Lotus decayed while away — revert to lily pad
+                    isLotus = false
+                    bloomDate = nil
+                    lotusLifespan = 0
+                    restoredPoem = revealedPoemsStore.getNextPoem()
+                    if restoredPoem == nil { return nil }
+                }
+            }
+
             return Pad(
                 anchor: CGPoint(x: saved.anchorX, y: saved.anchorY),
-                isLotus: saved.isLotus,
+                isLotus: isLotus,
                 targetAnchor: randomPointInPool(),
                 movementStyle: saved.movementStyle,
                 phase: saved.phase,
                 speed: saved.speed,
-                storedPoem: poem
+                storedPoem: restoredPoem,
+                bloomDate: bloomDate,
+                lotusLifespan: lotusLifespan
             )
         }
     }
