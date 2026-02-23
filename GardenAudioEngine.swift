@@ -236,7 +236,9 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
 
         buffer.frameLength = AVAudioFrameCount(samples.count)
         let dst = channelData[0]
-        for i in 0..<samples.count { dst[i] = samples[i] }
+        samples.withUnsafeBufferPointer { src in
+            dst.update(from: src.baseAddress!, count: samples.count)
+        }
 
         // Round-robin across player pool (allows overlapping sounds)
         let player = sfxPlayers[sfxPlayerIndex]

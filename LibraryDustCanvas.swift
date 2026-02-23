@@ -27,6 +27,8 @@ private final class DustParticleData: ObservableObject, @unchecked Sendable {
     private var motes: [DustMote] = []
     private var lastTime: TimeInterval = 0
     private var initialized = false
+    private let darkColor = Color(red: 1.0, green: 0.90, blue: 0.65)
+    private let lightColor = Color(red: 0.72, green: 0.58, blue: 0.32)
 
     private static func makeMote(in size: CGSize, randomPosition: Bool) -> DustMote {
         DustMote(
@@ -70,10 +72,7 @@ private final class DustParticleData: ObservableObject, @unchecked Sendable {
     }
 
     func render(in context: inout GraphicsContext, size: CGSize, isDark: Bool) {
-        let color = isDark
-            ? Color(red: 1.0, green: 0.90, blue: 0.65)
-            : Color(red: 0.72, green: 0.58, blue: 0.32)
-
+        let color = isDark ? darkColor : lightColor
         for mote in motes {
             var ctx = context
             ctx.translateBy(x: mote.x, y: mote.y)

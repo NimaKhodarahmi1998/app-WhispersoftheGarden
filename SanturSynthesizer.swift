@@ -50,7 +50,8 @@ final class SanturSynthesizer: @unchecked Sendable {
 
     // MARK: - Gusheh Data
 
-    private let gushehs: [GushehData]
+    private static let _gushehs: [GushehData] = buildGushehs()
+    private var gushehs: [GushehData] { Self._gushehs }
 
     private static func buildGushehs() -> [GushehData] {
         [
@@ -137,7 +138,6 @@ final class SanturSynthesizer: @unchecked Sendable {
 
     private var state: State = .resting
     private var samplesUntilEvent: Int = 0
-    private var performanceSamples: Int = 0
 
     // Phrase tracking
     private var currentMotif: [Int] = []
@@ -208,8 +208,7 @@ final class SanturSynthesizer: @unchecked Sendable {
     init(sampleRate: Double) {
         self.sampleRate = sampleRate
         self.voices = (0..<12).map { _ in SanturVoice(sampleRate: sampleRate) }
-        self.gushehs = SanturSynthesizer.buildGushehs()
-        self.gushehVisitCounts = [Int](repeating: 0, count: 7)
+        self.gushehVisitCounts = [Int](repeating: 0, count: Self._gushehs.count)
         samplesUntilEvent = Int(Double.random(in: 1.0...2.0) * sampleRate)
         phrasesBeforeForud = Int.random(in: 3...6)
         journeyPhraseLimit = Int.random(in: 35...50)
@@ -248,7 +247,6 @@ final class SanturSynthesizer: @unchecked Sendable {
         let playing = isPlaying
         for i in 0..<frameCount {
             if playing {
-                performanceSamples += 1
                 samplesUntilEvent -= 1
                 if samplesUntilEvent <= 0 { handleEvent() }
             }
@@ -907,7 +905,7 @@ private final class SanturVoice {
     private var writeIndices: [Int]
 
     private let stringWeights: [Float] = [0.82, 1.0, 0.93, 0.72]
-    private let weightSum: Float = 3.47
+    private let invWeightSum: Float = 1.0 / 3.47
 
     private var active: Bool = false
 
@@ -919,6 +917,7 @@ private final class SanturVoice {
 
     // Frequency-dependent loop filter
     private var filterA: Float = 0.55
+    private var filterB: Float = 0.45
 
     private(set) var energy: Float = 0
     private let energyThreshold: Float = 0.00012
@@ -988,15 +987,15 @@ private final class SanturVoice {
         if frequency > 500 {
             gPrompt = 0.9968; gAftersound = 0.9994
             crossoverSamples = Int(0.35 * sampleRate)
-            filterA = 0.58
+            filterA = 0.58; filterB = 0.42
         } else if frequency > 300 {
             gPrompt = 0.9977; gAftersound = 0.9997
             crossoverSamples = Int(0.6 * sampleRate)
-            filterA = 0.54
+            filterA = 0.54; filterB = 0.46
         } else {
             gPrompt = 0.9983; gAftersound = 0.9998
             crossoverSamples = Int(0.95 * sampleRate)
-            filterA = 0.52
+            filterA = 0.52; filterB = 0.48
         }
 
         samplesSinceStrike = 0
@@ -1024,15 +1023,14 @@ private final class SanturVoice {
             let current = delayLines[s][readIdx]
 
             // Asymmetric loop filter (frequency-dependent coefficient)
-            let filtered = filterA * delayLines[s][readIdx]
-                + (1.0 - filterA) * delayLines[s][nextIdx]
+            let filtered = filterA * current + filterB * delayLines[s][nextIdx]
 
             delayLines[s][readIdx] = filtered * g
             writeIndices[s] = nextIdx
             output += current * stringWeights[s]
         }
 
-        output /= weightSum
+        output *= invWeightSum
         energy = energy * 0.9995 + abs(output) * 0.0005
 
         if energy < energyThreshold {

@@ -190,38 +190,20 @@ struct LibraryView: View {
 
     // MARK: - Adaptive Color Palette
 
-    private var bgBase: Color {
-        colorScheme == .dark
-            ? Color(red: 0.04, green: 0.06, blue: 0.14)
-            : Color(red: 0.96, green: 0.93, blue: 0.87)
-    }
-    private var cardColor: Color {
-        colorScheme == .dark
-            ? Color(red: 0.95, green: 0.88, blue: 0.7).opacity(0.06)
-            : Color(red: 0.91, green: 0.86, blue: 0.78).opacity(0.45)
-    }
-    private var rose: Color {
-        colorScheme == .dark
-            ? Color(red: 0.9, green: 0.4, blue: 0.5)
-            : Color(red: 0.75, green: 0.28, blue: 0.38)
-    }
-    private var gold: Color {
-        colorScheme == .dark
-            ? Color(red: 1.0, green: 0.85, blue: 0.55)
-            : Color(red: 0.72, green: 0.56, blue: 0.18)
-    }
+    private var colors: AdaptiveColors { AdaptiveColors(colorScheme: colorScheme) }
+    private var bgBase: Color { colors.bgBase }
+    private var cardColor: Color { colors.cardColor }
+    private var rose: Color { colors.rose }
+    private var gold: Color { colors.gold }
+    private var textPrimary: Color { colors.textPrimary }
+    private var textSecondary: Color { colors.textSecondary }
+    private var textTertiary: Color { colors.textTertiary }
+
     private var highlight: Color {
         colorScheme == .dark
             ? Color(red: 1.0, green: 0.75, blue: 0.2)
             : Color(red: 0.78, green: 0.52, blue: 0.08)
     }
-
-    // Semantic text colors
-    private var textPrimary: Color {
-        colorScheme == .dark ? .white : Color(red: 0.15, green: 0.12, blue: 0.08)
-    }
-    private var textSecondary: Color { textPrimary.opacity(0.6) }
-    private var textTertiary: Color { textPrimary.opacity(0.35) }
     private var surfaceFill: Color { textPrimary.opacity(0.06) }
     private var surfaceFillSubtle: Color { textPrimary.opacity(0.03) }
     private var trackFill: Color { textPrimary.opacity(0.08) }
@@ -309,12 +291,14 @@ struct LibraryView: View {
                                 total: revealedPoemsStore.totalPoemsCount
                             )
 
+                            let lotusRevealed = revealedFilteredPoems
+                            let lotusIndex = Dictionary(uniqueKeysWithValues: lotusRevealed.enumerated().map { ($1.id, $0) })
+
                             LazyVGrid(columns: tileColumns, spacing: 12) {
                                 ForEach(Array(filteredPoems.enumerated()), id: \.element.id) { _, poem in
                                     if revealedPoemsStore.isRevealed(poem) {
-                                        let revealedList = revealedFilteredPoems
-                                        let idx = revealedList.firstIndex(where: { $0.id == poem.id }) ?? 0
-                                        NavigationLink(destination: PoemDetailView(poems: revealedList, currentIndex: idx)) {
+                                        let idx = lotusIndex[poem.id] ?? 0
+                                        NavigationLink(destination: PoemDetailView(poems: lotusRevealed, currentIndex: idx)) {
                                             poemTile(poem)
                                         }
                                         .buttonStyle(.plain)
@@ -344,12 +328,14 @@ struct LibraryView: View {
                                 total: NightingaleCouplets.couplets.count
                             )
 
+                            let nightRevealed = revealedFilteredNightingale
+                            let nightIndex = Dictionary(uniqueKeysWithValues: nightRevealed.enumerated().map { ($1.id, $0) })
+
                             LazyVGrid(columns: tileColumns, spacing: 12) {
                                 ForEach(Array(filteredNightingaleCouplets.enumerated()), id: \.element.id) { _, couplet in
                                     if revealedPoemsStore.revealedNightingaleIDs.contains(couplet.id) {
-                                        let revealedList = revealedFilteredNightingale
-                                        let idx = revealedList.firstIndex(where: { $0.id == couplet.id }) ?? 0
-                                        NavigationLink(destination: PoemDetailView(poems: revealedList, currentIndex: idx)) {
+                                        let idx = nightIndex[couplet.id] ?? 0
+                                        NavigationLink(destination: PoemDetailView(poems: nightRevealed, currentIndex: idx)) {
                                             poemTile(couplet)
                                         }
                                         .buttonStyle(.plain)

@@ -34,7 +34,7 @@ enum SFXBufferGen {
         switch type {
         case .waterDrop:        return waterDrop(sr: sr)
         case .lilyPadAppear:    return lilyPadAppear(sr: sr)
-        case .lotusBloom:       return lotusBloom(sr: sr)
+        case .lotusBloom:       return []
         case .poemReveal:       return poemReveal(sr: sr)
         case .poemDismiss:      return poemDismiss(sr: sr)
         case .nightingaleChirp:    return nightingaleChirp(sr: sr)
@@ -92,6 +92,19 @@ enum SFXBufferGen {
             output[i] = band
         }
         return output
+    }
+
+    /// Chamberlin state-variable bandpass filter (in-place variant — zero allocations)
+    private static func bandpassInPlace(_ buf: inout [Float], center: Double, q: Double, sr: Double) {
+        let f = 2.0 * sin(Float.pi * Float(center / sr))
+        let qInv = Float(1.0 / q)
+        var low: Float = 0, band: Float = 0
+        for i in 0..<buf.count {
+            low += f * band
+            let high = buf[i] - low - qInv * band
+            band += f * high
+            buf[i] = band
+        }
     }
 
     /// Raised-cosine fade on buffer edges (click prevention)
@@ -194,12 +207,6 @@ enum SFXBufferGen {
         return buf
     }
 
-    // MARK: - 3. Lotus Bloom (silent — no sound on lotus appearance)
-
-    private static func lotusBloom(sr: Double) -> [Float] {
-        return []
-    }
-
     // MARK: - 4. Poem Reveal (ascending harp arpeggio — Karplus-Strong)
     //
     // Gentle ascending harp plucks using Karplus-Strong plucked-string
@@ -263,18 +270,20 @@ enum SFXBufferGen {
         let count = Int(Double(dur) * sr)
         var buf = [Float](repeating: 0, count: count)
 
-        // Sweeping-cutoff pink noise — process in blocks
+        // Sweeping-cutoff pink noise — process in blocks (reuse one buffer)
         let pn = pinkNoise(count: count)
         let blockSize = 256
+        var block = [Float](repeating: 0, count: blockSize)
         var pos = 0
         while pos < count {
             let end = min(pos + blockSize, count)
+            let len = end - pos
             let n = Float(pos) / Float(count)
-            // Cutoff sweeps from 400 Hz down to 100 Hz
             let cutoff = Double(400.0 - 300.0 * n)
-            var block = Array(pn[pos..<end])
+            for j in 0..<len { block[j] = pn[pos + j] }
+            for j in len..<blockSize { block[j] = 0 }
             lowpass(&block, cutoff: cutoff, sr: sr)
-            for j in 0..<block.count { buf[pos + j] = block[j] }
+            for j in 0..<len { buf[pos + j] = block[j] }
             pos = end
         }
 
@@ -475,18 +484,19 @@ enum SFXBufferGen {
 
         let pn = pinkNoise(count: count)
 
-        // Descending bandpass — bird recedes into distance
+        // Descending bandpass — bird recedes into distance (reuse one buffer)
         let blockSize = 512
+        var block = [Float](repeating: 0, count: blockSize)
         var pos = 0
         while pos < count {
             let end = min(pos + blockSize, count)
+            let len = end - pos
             let n = Float(pos) / Float(count)
             let center = Double(800.0 - 400.0 * n) // 800→400 Hz
-            let block = Array(pn[pos..<end])
-            let filtered = bandpass(block, center: center, q: 0.7, sr: sr)
-            for j in 0..<filtered.count {
-                buf[pos + j] = filtered[j]
-            }
+            for j in 0..<len { block[j] = pn[pos + j] }
+            for j in len..<blockSize { block[j] = 0 }
+            bandpassInPlace(&block, center: center, q: 0.7, sr: sr)
+            for j in 0..<len { buf[pos + j] = block[j] }
             pos = end
         }
 
@@ -590,7 +600,9 @@ enum SFXBufferGen {
             buf[i] += 0.04 * env * leafNoise[i]
         }
 
-        // Granular micro-bursts (leaf rustling texture)
+        // Granular micro-bursts (leaf rustling texture — reuse one grain buffer)
+        let maxGrainLen = Int(0.01 * sr) + 1
+        var grain = [Float](repeating: 0, count: maxGrainLen)
         var pos = 0
         while pos < count {
             let gLen = Int(Double.random(in: 0.004...0.01) * sr)
@@ -598,17 +610,17 @@ enum SFXBufferGen {
             let gAmp = Float.random(in: 0.003...0.009)
             let gap = Int(Double.random(in: 0.015...0.035) * sr)
 
-            var grain = [Float](repeating: 0, count: gLen)
             for j in 0..<gLen {
                 let w = 0.5 * (1.0 - cos(twoPi * Float(j) / Float(gLen)))
                 grain[j] = w * Float.random(in: -1...1)
             }
-            let fGrain = bandpass(grain, center: gCenter, q: 2.5, sr: sr)
+            for j in gLen..<maxGrainLen { grain[j] = 0 }
+            bandpassInPlace(&grain, center: gCenter, q: 2.5, sr: sr)
 
             let gNorm = Float(pos) / Float(count)
             let posEnv: Float = gNorm < 0.15 ? gNorm / 0.15 : exp(-(gNorm - 0.15) / 0.3)
             for j in 0..<gLen where pos + j < count {
-                buf[pos + j] += gAmp * posEnv * fGrain[j]
+                buf[pos + j] += gAmp * posEnv * grain[j]
             }
             pos += gLen + gap
         }

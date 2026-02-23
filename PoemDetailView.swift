@@ -20,23 +20,15 @@ struct PoemDetailView: View {
 
     // MARK: - Adaptive Color Palette
 
+    private var colors: AdaptiveColors { AdaptiveColors(colorScheme: colorScheme) }
+    private var rose: Color { colors.rose }
+    private var gold: Color { colors.gold }
+    private var textPrimary: Color { colors.textPrimary }
+
     private var bgColor: Color {
         colorScheme == .dark
             ? Color(red: 0.02, green: 0.08, blue: 0.18)
             : Color(red: 0.96, green: 0.93, blue: 0.87)
-    }
-    private var rose: Color {
-        colorScheme == .dark
-            ? Color(red: 0.9, green: 0.4, blue: 0.5)
-            : Color(red: 0.75, green: 0.28, blue: 0.38)
-    }
-    private var gold: Color {
-        colorScheme == .dark
-            ? Color(red: 1.0, green: 0.85, blue: 0.55)
-            : Color(red: 0.72, green: 0.56, blue: 0.18)
-    }
-    private var textPrimary: Color {
-        colorScheme == .dark ? .white : Color(red: 0.15, green: 0.12, blue: 0.08)
     }
 
     /// Convenience init for single poem

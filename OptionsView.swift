@@ -17,32 +17,15 @@ struct OptionsView: View {
     @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 13
     @ScaledMetric(relativeTo: .headline) private var headlineSize: CGFloat = 20
 
-    // MARK: - Adaptive Colors (mirrors LibraryView)
+    // MARK: - Adaptive Colors
 
-    private var bgBase: Color {
-        colorScheme == .dark
-            ? Color(red: 0.04, green: 0.06, blue: 0.14)
-            : Color(red: 0.96, green: 0.93, blue: 0.87)
-    }
-    private var cardColor: Color {
-        colorScheme == .dark
-            ? Color(red: 0.95, green: 0.88, blue: 0.7).opacity(0.06)
-            : Color(red: 0.91, green: 0.86, blue: 0.78).opacity(0.45)
-    }
-    private var gold: Color {
-        colorScheme == .dark
-            ? Color(red: 1.0, green: 0.85, blue: 0.55)
-            : Color(red: 0.72, green: 0.56, blue: 0.18)
-    }
-    private var darkGold: Color {
-        colorScheme == .dark
-            ? Color(red: 0.92, green: 0.78, blue: 0.48)
-            : Color(red: 0.65, green: 0.48, blue: 0.15)
-    }
-    private var textPrimary: Color {
-        colorScheme == .dark ? .white : Color(red: 0.15, green: 0.12, blue: 0.08)
-    }
-    private var textTertiary: Color { textPrimary.opacity(0.35) }
+    private var colors: AdaptiveColors { AdaptiveColors(colorScheme: colorScheme) }
+    private var bgBase: Color { colors.bgBase }
+    private var cardColor: Color { colors.cardColor }
+    private var gold: Color { colors.gold }
+    private var darkGold: Color { colors.darkGold }
+    private var textPrimary: Color { colors.textPrimary }
+    private var textTertiary: Color { colors.textTertiary }
 
     // MARK: - Body
 

@@ -19,6 +19,7 @@ private struct LandingMote {
     var drift: CGFloat
     var phase: CGFloat
     var warmth: CGFloat
+    var cachedColor: Color
 }
 
 private final class LandingParticleData: ObservableObject, @unchecked Sendable {
@@ -62,11 +63,7 @@ private final class LandingParticleData: ObservableObject, @unchecked Sendable {
             ctx.translateBy(x: mote.x, y: mote.y)
             let r = mote.size
             let rect = CGRect(x: -r, y: -r, width: r * 2, height: r * 2)
-            let color = Color(
-                red: 1.0,
-                green: 0.88 - Double(mote.warmth) * 0.08,
-                blue: 0.55 - Double(mote.warmth) * 0.15
-            )
+            let color = mote.cachedColor
             ctx.fill(
                 Circle().path(in: rect),
                 with: .radialGradient(
@@ -84,7 +81,8 @@ private final class LandingParticleData: ObservableObject, @unchecked Sendable {
     }
 
     private static func makeMote(in size: CGSize, randomY: Bool) -> LandingMote {
-        LandingMote(
+        let w = CGFloat.random(in: 0...1)
+        return LandingMote(
             x: .random(in: 0...size.width),
             y: randomY ? .random(in: 0...size.height) : size.height + .random(in: 5...30),
             size: .random(in: 2.0...4.5),
@@ -92,7 +90,12 @@ private final class LandingParticleData: ObservableObject, @unchecked Sendable {
             speed: .random(in: 8...20),
             drift: .random(in: -6...6),
             phase: .random(in: 0...(2 * .pi)),
-            warmth: .random(in: 0...1)
+            warmth: w,
+            cachedColor: Color(
+                red: 1.0,
+                green: 0.88 - Double(w) * 0.08,
+                blue: 0.55 - Double(w) * 0.15
+            )
         )
     }
 }
@@ -416,7 +419,8 @@ struct LandingPage: View {
                 showDivider = false
                 showButtons = false
                 showQuote = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 50_000_000)
                     playEntrance()
                 }
             }
@@ -446,7 +450,8 @@ struct LandingPage: View {
             }
             // Enable interaction only after button animation finishes
             // (1.0s delay + 0.6s duration = 1.6s)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 1_700_000_000)
                 buttonsInteractive = true
             }
         }
