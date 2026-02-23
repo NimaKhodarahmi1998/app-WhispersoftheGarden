@@ -82,10 +82,18 @@ struct ContentView: View {
         Task { @MainActor in
             audio.playSFX(.petalWhoosh)
 
+            // Pre-create the garden view (hidden) so all assets, Metal
+            // pipelines, and state initialize before the transition starts.
+            if !gardenCreated {
+                gardenCreated = true
+                gardenOpacity = 0
+                // Give SwiftUI a frame to instantiate the view tree
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+
             if reduceMotion {
                 // Instant cross-fade with brief overlay
                 try? await Task.sleep(for: .milliseconds(100))
-                gardenCreated = true
                 showGarden = true
                 gardenOpacity = 1.0
                 landingVisible = false
@@ -95,10 +103,8 @@ struct ContentView: View {
                 // Phase 1: Petals sweep in
                 try? await Task.sleep(for: .milliseconds(350))
 
-                // Phase 2: Show garden, cross-dissolve in
-                gardenCreated = true
+                // Phase 2: Cross-dissolve garden in
                 showGarden = true
-                gardenOpacity = 0
 
                 withAnimation(.easeInOut(duration: 0.5)) {
                     gardenOpacity = 1.0

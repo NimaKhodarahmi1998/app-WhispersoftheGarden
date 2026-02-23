@@ -361,6 +361,74 @@ fragment float4 waterFragment(VertexOut in [[stage_in]],
 }
 """
 
+// MARK: - Pre-built Metal Pipeline (compiled on app launch in background)
+
+struct WaterPipelineCache: @unchecked Sendable {
+    let device: MTLDevice
+    let commandQueue: MTLCommandQueue
+    let pipelineState: MTLRenderPipelineState
+    let vertexBuffer: MTLBuffer
+}
+
+enum WaterShaderCache {
+    nonisolated(unsafe) private static var cached: WaterPipelineCache?
+    nonisolated(unsafe) private static var building = false
+
+    /// Call from app init — builds the entire Metal pipeline on a background thread.
+    static func warmup() {
+        guard cached == nil, !building else { return }
+        building = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = buildPipeline()
+            DispatchQueue.main.async {
+                cached = result
+                building = false
+            }
+        }
+    }
+
+    /// Returns pre-built pipeline, or builds synchronously as fallback.
+    static func pipeline() -> WaterPipelineCache? {
+        if let c = cached { return c }
+        let result = buildPipeline()
+        cached = result
+        return result
+    }
+
+    private static func buildPipeline() -> WaterPipelineCache? {
+        guard let device = MTLCreateSystemDefaultDevice(),
+              let queue = device.makeCommandQueue(),
+              let library = try? device.makeLibrary(source: waterShaderSource, options: nil),
+              let vertexFn = library.makeFunction(name: "waterVertex"),
+              let fragmentFn = library.makeFunction(name: "waterFragment")
+        else { return nil }
+
+        let desc = MTLRenderPipelineDescriptor()
+        desc.vertexFunction = vertexFn
+        desc.fragmentFunction = fragmentFn
+        desc.colorAttachments[0].pixelFormat = .bgra8Unorm
+        desc.colorAttachments[0].isBlendingEnabled = true
+        desc.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+        desc.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        desc.colorAttachments[0].sourceAlphaBlendFactor = .one
+        desc.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
+
+        guard let pipeline = try? device.makeRenderPipelineState(descriptor: desc) else { return nil }
+
+        let quadVertices: [SIMD2<Float>] = [
+            SIMD2(-1, -1), SIMD2( 1, -1), SIMD2(-1,  1),
+            SIMD2(-1,  1), SIMD2( 1, -1), SIMD2( 1,  1)
+        ]
+        guard let vb = device.makeBuffer(bytes: quadVertices,
+                                          length: MemoryLayout<SIMD2<Float>>.stride * 6,
+                                          options: .storageModeShared)
+        else { return nil }
+
+        return WaterPipelineCache(device: device, commandQueue: queue,
+                                   pipelineState: pipeline, vertexBuffer: vb)
+    }
+}
+
 // MARK: - Renderer
 
 @MainActor
@@ -378,42 +446,12 @@ final class WaterRenderer: NSObject, MTKViewDelegate {
     private let rippleLifetime: Float = 4.0
 
     init?(mtkView: MTKView) {
-        guard let device = mtkView.device,
-              let queue = device.makeCommandQueue() else { return nil }
-        self.device = device
-        self.commandQueue = queue
-
-        // Compile shader from source string at runtime
-        guard let library = try? device.makeLibrary(source: waterShaderSource, options: nil),
-              let vertexFn = library.makeFunction(name: "waterVertex"),
-              let fragmentFn = library.makeFunction(name: "waterFragment")
-        else { return nil }
-
-        let desc = MTLRenderPipelineDescriptor()
-        desc.vertexFunction = vertexFn
-        desc.fragmentFunction = fragmentFn
-        desc.colorAttachments[0].pixelFormat = mtkView.colorPixelFormat
-
-        desc.colorAttachments[0].isBlendingEnabled = true
-        desc.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
-        desc.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
-        desc.colorAttachments[0].sourceAlphaBlendFactor = .one
-        desc.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
-
-        guard let pipeline = try? device.makeRenderPipelineState(descriptor: desc)
-        else { return nil }
-        self.pipelineState = pipeline
-
-        let quadVertices: [SIMD2<Float>] = [
-            SIMD2(-1, -1), SIMD2( 1, -1), SIMD2(-1,  1),
-            SIMD2(-1,  1), SIMD2( 1, -1), SIMD2( 1,  1)
-        ]
-        guard let vb = device.makeBuffer(bytes: quadVertices,
-                                          length: MemoryLayout<SIMD2<Float>>.stride * 6,
-                                          options: .storageModeShared)
-        else { return nil }
-        self.vertexBuffer = vb
-
+        guard let cache = WaterShaderCache.pipeline() else { return nil }
+        self.device = cache.device
+        self.commandQueue = cache.commandQueue
+        self.pipelineState = cache.pipelineState
+        self.vertexBuffer = cache.vertexBuffer
+        mtkView.device = cache.device
         super.init()
     }
 
@@ -498,7 +536,7 @@ struct WaterMetalView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MTKView {
         let mtkView = MTKView()
-        mtkView.device = MTLCreateSystemDefaultDevice()
+        // Device is set by WaterRenderer from the pre-built cache
         mtkView.colorPixelFormat = .bgra8Unorm
         mtkView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         mtkView.isOpaque = false
@@ -510,7 +548,6 @@ struct WaterMetalView: UIViewRepresentable {
             mtkView.delegate = renderer
             bridge.renderer = renderer
             context.coordinator.renderer = renderer
-            renderer.mtkView(mtkView, drawableSizeWillChange: mtkView.drawableSize)
         }
 
         mtkView.isPaused = reduceMotion || !isActive

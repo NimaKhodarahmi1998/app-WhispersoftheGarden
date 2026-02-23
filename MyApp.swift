@@ -20,6 +20,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct MyApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
+    init() {
+        WaterShaderCache.warmup()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
