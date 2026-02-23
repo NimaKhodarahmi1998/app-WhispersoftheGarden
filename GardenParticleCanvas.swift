@@ -46,21 +46,32 @@ final class ParticleData: ObservableObject, @unchecked Sendable {
 
     private var pollen: [PollenMote] = []
     private var petals: [PetalParticle] = []
+    private var sparkles: [PollenMote] = []
     private var lastTime: TimeInterval = 0
     private var initialized = false
     private var handledBursts = 0
+    private var initializedStage: Int = -1
 
     // MARK: Setup
 
-    private func setup(size: CGSize) {
+    private func setup(size: CGSize, gardenStage: Int) {
         guard !initialized else { return }
         initialized = true
+        initializedStage = gardenStage
 
-        for _ in 0..<25 {
+        let pollenCount = 25 + gardenStage * 5   // 25, 30, 35, 40, 45
+        let petalCount = 3 + gardenStage          // 3, 4, 5, 6, 7
+        for _ in 0..<pollenCount {
             pollen.append(Self.makePollen(in: size, randomY: true))
         }
-        for _ in 0..<3 {
+        for _ in 0..<petalCount {
             petals.append(Self.makePetal(in: size, randomY: true))
+        }
+        if gardenStage >= 3 {
+            let sparkleCount = (gardenStage - 2) * 3  // 3 at stage 3, 6 at stage 4
+            for _ in 0..<sparkleCount {
+                sparkles.append(Self.makeSparkle(in: size))
+            }
         }
     }
 
@@ -81,11 +92,11 @@ final class ParticleData: ObservableObject, @unchecked Sendable {
 
     // MARK: Update
 
-    func update(time: TimeInterval, size: CGSize) {
+    func update(time: TimeInterval, size: CGSize, gardenStage: Int = 0) {
         let dt = lastTime == 0 ? 0.016 : min(time - lastTime, 0.05)
         lastTime = time
 
-        if !initialized { setup(size: size) }
+        if !initialized { setup(size: size, gardenStage: gardenStage) }
 
         // --- Pollen ---
         for i in pollen.indices {
@@ -123,6 +134,24 @@ final class ParticleData: ObservableObject, @unchecked Sendable {
             if petals[i].x < -50 { petals[i].x = size.width + 30 }
             if petals[i].x > size.width + 50 { petals[i].x = -30 }
         }
+
+        // --- Golden sparkles (stages 3-4) ---
+        for i in sparkles.indices {
+            let sway = CGFloat(sin(time * 0.4 + Double(sparkles[i].phase))) * 10.0
+            sparkles[i].y += sparkles[i].speed * CGFloat(dt)
+            sparkles[i].x += (sparkles[i].drift + sway) * CGFloat(dt)
+
+            // Twinkle: sharper peaks for sparkle effect
+            let twinkle = CGFloat(sin(time * 3.0 + Double(sparkles[i].phase) * 4.0))
+            let sharpTwinkle = max(0, twinkle) * max(0, twinkle)  // squared for sharper peaks
+            sparkles[i].opacity = 0.3 + sharpTwinkle * 0.55
+
+            if sparkles[i].y > size.height + 30 {
+                sparkles[i] = Self.makeSparkle(in: size)
+            }
+            if sparkles[i].x < -30 { sparkles[i].x = size.width + 20 }
+            if sparkles[i].x > size.width + 30 { sparkles[i].x = -20 }
+        }
     }
 
     // MARK: Render
@@ -149,6 +178,32 @@ final class ParticleData: ObservableObject, @unchecked Sendable {
                     Gradient(colors: [
                         color.opacity(Double(mote.opacity)),
                         color.opacity(Double(mote.opacity) * 0.3),
+                        .clear
+                    ]),
+                    center: .zero,
+                    startRadius: 0,
+                    endRadius: r
+                )
+            )
+        }
+
+        // --- Golden sparkles (larger, brighter, golden-white) ---
+        for mote in sparkles {
+            var ctx = context
+            ctx.translateBy(x: mote.x, y: mote.y)
+
+            let r = mote.size
+            let rect = CGRect(x: -r, y: -r, width: r * 2, height: r * 2)
+
+            let color = Color(red: 1.0, green: 0.95, blue: 0.75)
+
+            ctx.fill(
+                Circle().path(in: rect),
+                with: .radialGradient(
+                    Gradient(colors: [
+                        color.opacity(Double(mote.opacity)),
+                        color.opacity(Double(mote.opacity) * 0.5),
+                        color.opacity(Double(mote.opacity) * 0.15),
                         .clear
                     ]),
                     center: .zero,
@@ -202,6 +257,19 @@ final class ParticleData: ObservableObject, @unchecked Sendable {
             drift: .random(in: -8...8),
             phase: .random(in: 0...(2 * .pi)),
             warmth: .random(in: 0...1)
+        )
+    }
+
+    private static func makeSparkle(in size: CGSize) -> PollenMote {
+        PollenMote(
+            x: .random(in: 0...size.width),
+            y: .random(in: 0...size.height),
+            size: .random(in: 4.0...8.0),
+            opacity: .random(in: 0.35...0.65),
+            speed: .random(in: 6...14),
+            drift: .random(in: -4...4),
+            phase: .random(in: 0...(2 * .pi)),
+            warmth: 1.0
         )
     }
 
@@ -259,6 +327,7 @@ struct GardenParticleCanvas: View {
     let petalBurst: Int
     var reduceMotion: Bool = false
     var isActive: Bool = true
+    var gardenStage: Int = 0
 
     @StateObject private var system = ParticleData()
 
@@ -271,7 +340,8 @@ struct GardenParticleCanvas: View {
                     guard isActive else { return }
                     system.update(
                         time: timeline.date.timeIntervalSinceReferenceDate,
-                        size: size
+                        size: size,
+                        gardenStage: gardenStage
                     )
                     system.handleBursts(requested: petalBurst, size: size)
                     system.render(in: &context, size: size)

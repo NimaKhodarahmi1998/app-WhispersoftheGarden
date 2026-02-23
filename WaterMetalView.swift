@@ -13,7 +13,7 @@ import MetalKit
 
 struct WaterUniforms {
     var time: Float = 0
-    var pad0: Float = 0
+    var gardenStage: Float = 0
     var resolution: SIMD2<Float> = .zero
     var ripples: (SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>,
                   SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>) =
@@ -43,6 +43,7 @@ private struct ActiveRipple {
 @MainActor
 final class WaterRendererBridge {
     fileprivate var renderer: WaterRenderer?
+    var gardenStage: Int = 0
 
     func addRipple(at normalizedPoint: CGPoint) {
         renderer?.addRipple(at: SIMD2<Float>(Float(normalizedPoint.x),
@@ -58,7 +59,7 @@ using namespace metal;
 
 struct Uniforms {
     float  time;
-    float  pad0;
+    float  gardenStage;
     float2 resolution;
     float4 ripples[8];
     int    rippleCount;
@@ -282,7 +283,9 @@ fragment float4 waterFragment(VertexOut in [[stage_in]],
     float edgeDist = distToPoolEdge(uv, verts);
     float edgeFade = smoothstep(0.0, 0.035, edgeDist);
 
-    float h = waveHeight(uv, time);
+    float stage = u.gardenStage;
+
+    float h = waveHeight(uv, time) * (1.0 + stage * 0.12);
 
     for (int i = 0; i < u.rippleCount && i < 8; i++) {
         h += rippleHeight(uv, u.ripples[i], time);
@@ -323,10 +326,10 @@ fragment float4 waterFragment(VertexOut in [[stage_in]],
     float spec3 = dot(normalize(normal), normalize(float2(0.0, -1.0)));
     spec3 = pow(clamp(spec3, 0.0, 1.0), 4.0) * 0.04;
 
-    float totalSpec = specular + spec2 + spec3;
+    float totalSpec = (specular + spec2 + spec3) * (1.0 + stage * 0.10);
 
     float c = caustics(uv + normal * 0.4, time);
-    c *= 0.12;
+    c *= 0.12 * (1.0 + stage * 0.15);
 
     float3 deepColor    = float3(0.03, 0.12, 0.32);
     float3 shallowColor = float3(0.06, 0.20, 0.40);
@@ -347,8 +350,10 @@ fragment float4 waterFragment(VertexOut in [[stage_in]],
     float3 specColor = float3(0.85, 0.92, 1.0) * totalSpec;
 
     float3 finalColor = baseColor + causticColor + specColor;
+    // Warm gold tint at higher garden stages
+    finalColor += float3(0.02, 0.01, 0.0) * max(stage - 2.0, 0.0);
 
-    float alpha = 0.38;
+    float alpha = 0.38 * (1.0 + stage * 0.04);
     alpha += totalSpec * 0.35;
     alpha += h * 0.6;
     alpha += c * 0.2;
@@ -444,6 +449,7 @@ final class WaterRenderer: NSObject, MTKViewDelegate {
     private var ripples: [ActiveRipple] = []
     private let maxRipples = 8
     private let rippleLifetime: Float = 4.0
+    var gardenStage: Int = 0
 
     init?(mtkView: MTKView) {
         guard let cache = WaterShaderCache.pipeline() else { return nil }
@@ -488,6 +494,7 @@ final class WaterRenderer: NSObject, MTKViewDelegate {
         ripples.removeAll { currentTime - $0.birthTime > rippleLifetime }
 
         uniforms.time = currentTime
+        uniforms.gardenStage = Float(gardenStage)
         uniforms.rippleCount = Int32(ripples.count)
 
         var r = uniforms.ripples
@@ -533,6 +540,7 @@ struct WaterMetalView: UIViewRepresentable {
     let bridge: WaterRendererBridge
     var isActive: Bool
     var reduceMotion: Bool
+    var gardenStage: Int = 0
 
     func makeUIView(context: Context) -> MTKView {
         let mtkView = MTKView()
@@ -545,6 +553,7 @@ struct WaterMetalView: UIViewRepresentable {
         mtkView.layer.isOpaque = false
 
         if let renderer = WaterRenderer(mtkView: mtkView) {
+            renderer.gardenStage = gardenStage
             mtkView.delegate = renderer
             bridge.renderer = renderer
             context.coordinator.renderer = renderer
@@ -556,6 +565,7 @@ struct WaterMetalView: UIViewRepresentable {
 
     func updateUIView(_ mtkView: MTKView, context: Context) {
         mtkView.isPaused = reduceMotion || !isActive
+        context.coordinator.renderer?.gardenStage = gardenStage
     }
 
     func makeCoordinator() -> Coordinator {

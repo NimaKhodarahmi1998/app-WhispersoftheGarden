@@ -155,12 +155,13 @@ struct GardenView: View {
     ]
 
     /// Garden evolves based on how many poems have been revealed.
+    /// Thresholds are low so the garden visibly grows within minutes.
     private var gardenStage: Int {
         let count = revealedPoemsStore.revealedCount
-        if count >= 12 { return 4 }
-        if count >= 9  { return 3 }
-        if count >= 6  { return 2 }
-        if count >= 3  { return 1 }
+        if count >= 4 { return 4 }
+        if count >= 3 { return 3 }
+        if count >= 2 { return 2 }
+        if count >= 1 { return 1 }
         return 0
     }
 
@@ -195,6 +196,17 @@ struct GardenView: View {
         }
     }
 
+    /// Breathing animation intensifies with garden stage.
+    private var breathingScale: CGFloat {
+        switch gardenStage {
+        case 0: return 1.0
+        case 1: return 1.05
+        case 2: return 1.10
+        case 3: return 1.15
+        default: return 1.20
+        }
+    }
+
     // Autonomous ripple state
     @State private var nextAutoRippleTime: TimeInterval = 0
     @State private var autoRippleBurstCount: Int = 0
@@ -211,6 +223,15 @@ struct GardenView: View {
     @State private var hasShownLongPressHint: Bool = false
     @State private var longPressWhisperOpacity: Double = 0
     @State private var longPressWhisperText: String = ""
+
+    // Drag-to-play water santur
+    @State private var isDraggingWater = false
+    @State private var lastSanturDegree: Int = -1
+    @State private var lastDragRippleTime: TimeInterval = 0
+    @State private var dragNoteGlowLocation: CGPoint = .zero
+    @State private var dragNoteGlowOpacity: Double = 0
+    @State private var dragHintOpacity: Double = 0
+    @State private var hasShownDragHint: Bool = false
 
     // Variable nightingale timing
     @State private var nightingaleThreshold: Int = 3
@@ -245,7 +266,7 @@ struct GardenView: View {
                     .ignoresSafeArea()
 
                 Color(red: 1.0, green: 0.95, blue: 0.85)
-                    .opacity(0.08 + breathingIntensity * 0.02 + gardenWarmthBonus)
+                    .opacity(0.08 + breathingIntensity * 0.02 * breathingScale + gardenWarmthBonus)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
 
@@ -258,9 +279,26 @@ struct GardenView: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
+                // Golden light rays at max garden stage
+                if gardenStage >= 4 {
+                    RadialGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.95, blue: 0.70).opacity(0.06),
+                            Color(red: 1.0, green: 0.90, blue: 0.60).opacity(0.03),
+                            Color.clear
+                        ],
+                        center: UnitPoint(x: 0.3, y: 0.1),
+                        startRadius: 0,
+                        endRadius: geo.size.width * 0.9
+                    )
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                }
+
                 WaterMetalView(bridge: waterBridge,
                                isActive: isActive,
-                               reduceMotion: reduceMotion)
+                               reduceMotion: reduceMotion,
+                               gardenStage: gardenStage)
                     .frame(width: geo.size.width, height: geo.size.height)
                     .clipShape(PoolWaterHitShape())
                     .allowsHitTesting(false)
@@ -272,6 +310,8 @@ struct GardenView: View {
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
+                                let moved = hypot(value.translation.width, value.translation.height)
+
                                 if longPressStartTime == nil {
                                     longPressStartTime = Date()
                                     longPressLocation = value.location
@@ -279,8 +319,66 @@ struct GardenView: View {
                                     longPressRippleCount = 0
                                     longPressGlowOpacity = 0
                                 }
+
+                                if moved > 15 {
+                                    // Finger is moving — drag-to-play gesture
+                                    isDraggingWater = true
+                                    isLongPressing = false
+
+                                    // Dismiss drag hint on first actual drag
+                                    if dragHintOpacity > 0 {
+                                        withAnimation(.easeOut(duration: 0.3)) {
+                                            dragHintOpacity = 0
+                                        }
+                                    }
+
+                                    // Map X position to scale degree across pool
+                                    let poolMinX: CGFloat = 0.21
+                                    let poolMaxX: CGFloat = 1.0
+                                    let normalizedX = value.location.x / geo.size.width
+                                    let clampedX = max(poolMinX, min(poolMaxX, normalizedX))
+                                    let t = (clampedX - poolMinX) / (poolMaxX - poolMinX)
+                                    let degree = max(0, min(9, Int(t * 10)))
+
+                                    if degree != lastSanturDegree {
+                                        lastSanturDegree = degree
+                                        // Velocity scales with drag speed — stands out over background melody
+                                        let predDx = abs(value.predictedEndLocation.x - value.location.x)
+                                        let velocity: Float = min(0.45, 0.22 + Float(predDx) * 0.001)
+                                        audio.strikeWaterSantur(degree: degree, velocity: velocity)
+                                        Haptics.santurStrike()
+
+                                        // Golden flash at finger position
+                                        dragNoteGlowLocation = value.location
+                                        dragNoteGlowOpacity = 1.0
+                                        withAnimation(.easeOut(duration: 0.35)) {
+                                            dragNoteGlowOpacity = 0
+                                        }
+                                    }
+
+                                    // Trail ripples (throttled to ~every 80ms)
+                                    let now = Date().timeIntervalSinceReferenceDate
+                                    if now - lastDragRippleTime > 0.08 {
+                                        lastDragRippleTime = now
+                                        let normalized = CGPoint(
+                                            x: value.location.x / geo.size.width,
+                                            y: value.location.y / geo.size.height
+                                        )
+                                        waterBridge.addRipple(at: normalized)
+                                    }
+                                }
                             }
                             .onEnded { _ in
+                                if isDraggingWater {
+                                    // Drag-to-play finished — reset
+                                    isDraggingWater = false
+                                    lastSanturDegree = -1
+                                    longPressStartTime = nil
+                                    isLongPressing = false
+                                    return
+                                }
+
+                                // Existing tap / long-press logic
                                 guard let start = longPressStartTime else { return }
                                 let holdDuration = Date().timeIntervalSince(start)
                                 let location = longPressLocation
@@ -291,10 +389,8 @@ struct GardenView: View {
                                 }
 
                                 if holdDuration < 1.5 {
-                                    // Short tap — existing behavior
                                     handleTap(at: location, in: geo.size)
                                 } else {
-                                    // Long-press contemplation
                                     handleLongPressRelease(at: location, in: geo.size)
                                 }
                             }
@@ -317,6 +413,25 @@ struct GardenView: View {
                         ),
                         startRadius: 0,
                         endRadius: geo.size.width * 0.2
+                    )
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                }
+
+                // Drag-to-play note glow — golden flash at finger on each new note
+                if dragNoteGlowOpacity > 0.01 {
+                    RadialGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.92, blue: 0.55).opacity(dragNoteGlowOpacity * 0.5),
+                            Color(red: 1.0, green: 0.85, blue: 0.40).opacity(dragNoteGlowOpacity * 0.25),
+                            Color.clear
+                        ],
+                        center: UnitPoint(
+                            x: dragNoteGlowLocation.x / geo.size.width,
+                            y: dragNoteGlowLocation.y / geo.size.height
+                        ),
+                        startRadius: 0,
+                        endRadius: geo.size.width * 0.08
                     )
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
@@ -394,7 +509,7 @@ struct GardenView: View {
                     }
                 }
 
-                GardenParticleCanvas(petalBurst: petalBurst, reduceMotion: reduceMotion, isActive: isActive)
+                GardenParticleCanvas(petalBurst: petalBurst, reduceMotion: reduceMotion, isActive: isActive, gardenStage: gardenStage)
 
                 ForEach(fireflies) { firefly in
                     Circle()
@@ -536,6 +651,16 @@ struct GardenView: View {
                     .position(x: geo.size.width * 0.5, y: geo.size.height * 0.55)
                     .allowsHitTesting(false)
 
+                // Drag-to-play discovery hint
+                Text("Trace the water to play\u{2026}")
+                    .font(.system(size: whisperSize, weight: .light, design: .serif))
+                    .italic()
+                    .foregroundColor(Color(red: 0.75, green: 0.88, blue: 1.0))
+                    .shadow(color: .black.opacity(0.8), radius: 8)
+                    .opacity(dragHintOpacity)
+                    .position(x: geo.size.width * 0.5, y: geo.size.height * 0.62)
+                    .allowsHitTesting(false)
+
                 // Golden feather + whisper — nightingale approaching hint
                 if showApproachFeather || showApproachWhisper {
                     nightingaleApproachHintView(in: geo.size)
@@ -587,6 +712,7 @@ struct GardenView: View {
             }
             lastUpdateTime = now
             time += dt
+
             updatePads(dt: dt)
 
             // Autonomous ripples — the garden breathes
@@ -742,7 +868,27 @@ struct GardenView: View {
         hintStore.markPoolTapped()
         hintStore.markPoolTappedAgain()
         hintStore.markPoolTappedThrice()
+        showDragHintIfNeeded()
         saveGardenState()
+    }
+
+    /// Shows "Trace the water to play…" hint after the user's first pool tap.
+    private func showDragHintIfNeeded() {
+        guard !hasShownDragHint else { return }
+        hasShownDragHint = true
+        // Appear after a short delay so it doesn't clash with the tap itself
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+            guard !isDraggingWater else { return }  // they already discovered it
+            withAnimation(.easeIn(duration: 0.8)) {
+                dragHintOpacity = 0.9
+            }
+            // Auto-fade after 4 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                withAnimation(.easeOut(duration: 1.2)) {
+                    dragHintOpacity = 0
+                }
+            }
+        }
     }
 
     /// Long-press contemplation — "Still Water Runs Deep"

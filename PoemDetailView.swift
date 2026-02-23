@@ -12,9 +12,9 @@ struct PoemDetailView: View {
     @State private var showShareSheet = false
     @Environment(\.colorScheme) private var colorScheme
 
-    @ScaledMetric(relativeTo: .caption) private var poetNameSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .title2) private var translationSize: CGFloat = 22
-    @ScaledMetric(relativeTo: .body) private var persianSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .caption) private var poetNameSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .title2) private var translationSize: CGFloat = 24
+    @ScaledMetric(relativeTo: .body) private var persianSize: CGFloat = 18
 
     private var poem: Poem { poems[currentIndex] }
 
@@ -63,7 +63,7 @@ struct PoemDetailView: View {
                 VStack {
                     Spacer()
                     dotIndicator
-                        .padding(.bottom, 16)
+                        .padding(.bottom, 90)
                 }
             }
         }

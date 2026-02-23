@@ -700,4 +700,10 @@ enum Haptics {
         let gen = UIImpactFeedbackGenerator(style: .light)
         gen.impactOccurred(intensity: 0.30)
     }
+
+    /// Santur note struck during drag-to-play — a string plucked under water.
+    static func santurStrike() {
+        let gen = UIImpactFeedbackGenerator(style: .light)
+        gen.impactOccurred(intensity: 0.35)
+    }
 }

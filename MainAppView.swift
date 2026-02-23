@@ -15,6 +15,7 @@ struct MainAppView: View {
     @State private var isTabTransitioning = false
     @State private var pendingTab: Int? = nil
     @State private var windDirection: PetalWindDirection = .rightToLeft
+    @State private var libraryNavPath = NavigationPath()
 
     // Persian palette (centralized in PersianColors)
     private let gold = Color.gardenGold
@@ -32,7 +33,7 @@ struct MainAppView: View {
                 .allowsHitTesting(selectedTab == 0 && !isTabTransitioning)
 
             // Library — always alive (no creation spike on tab switch), paused when off-screen
-            NavigationStack {
+            NavigationStack(path: $libraryNavPath) {
                 LibraryView(showMainApp: $showMainApp, isActive: selectedTab == 1 && showMainApp && !isTabTransitioning)
             }
             .opacity(selectedTab == 1 ? 1 : 0)
@@ -106,7 +107,17 @@ struct MainAppView: View {
     // MARK: - Tab Transition
 
     private func switchTab(to tab: Int) {
-        guard tab != selectedTab && !isTabTransitioning else { return }
+        guard !isTabTransitioning else { return }
+
+        // Re-tap library while already on library → pop to root
+        if tab == selectedTab {
+            if tab == 1 && !libraryNavPath.isEmpty {
+                audio.playSFX(.gentleTap)
+                withAnimation { libraryNavPath = NavigationPath() }
+            }
+            return
+        }
+
         Haptics.tabSwitch()
 
         if reduceMotion {

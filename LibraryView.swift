@@ -67,15 +67,15 @@ struct LibraryView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     // Dynamic Type scaled font sizes
-    @ScaledMetric(relativeTo: .caption2) private var tinySize: CGFloat = 11
-    @ScaledMetric(relativeTo: .caption) private var smallSize: CGFloat = 12
-    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 13
-    @ScaledMetric(relativeTo: .footnote) private var footnoteSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .footnote) private var chipSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .subheadline) private var bodySmallSize: CGFloat = 16
-    @ScaledMetric(relativeTo: .body) private var bodySize: CGFloat = 18
-    @ScaledMetric(relativeTo: .headline) private var headlineSize: CGFloat = 20
-    @ScaledMetric(relativeTo: .body) private var tileMinHeight: CGFloat = 190
+    @ScaledMetric(relativeTo: .caption2) private var tinySize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var smallSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var footnoteSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var chipSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var bodySmallSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .body) private var bodySize: CGFloat = 19
+    @ScaledMetric(relativeTo: .headline) private var headlineSize: CGFloat = 22
+    @ScaledMetric(relativeTo: .body) private var tileMinHeight: CGFloat = 200
 
     // All poems (revealed + locked)
     private var allPoems: [Poem] { PoemLibrary.poems }

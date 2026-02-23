@@ -168,6 +168,12 @@ final class GardenAudioEngine: ObservableObject, @unchecked Sendable {
 
     // MARK: - Public API
 
+    /// Plays a user-triggered santur note (drag-to-play on pool).
+    func strikeWaterSantur(degree: Int, velocity: Float) {
+        guard isMusicEnabled, let santur = santur else { return }
+        santur.queueUserStrike(degree: degree, velocity: velocity)
+    }
+
     func startEngine() {
         guard !isEngineRunning else { return }
 

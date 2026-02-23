@@ -72,7 +72,13 @@ struct OptionsView: View {
                     // Persian divider
                     persianDivider
 
-                    // About section
+                    // Garden progress section
+                    gardenProgressSection
+
+                    // Persian divider
+                    persianDivider
+
+                    // About the art
                     aboutSection
 
                     // Persian divider
@@ -152,9 +158,9 @@ struct OptionsView: View {
         }
     }
 
-    // MARK: - About Section
+    // MARK: - Garden Progress Section
 
-    private var aboutSection: some View {
+    private var gardenProgressSection: some View {
         VStack(spacing: 12) {
             sectionHeader(icon: "leaf.fill", title: "Garden", subtitle: "Progress and details")
 
@@ -196,6 +202,85 @@ struct OptionsView: View {
                     )
             )
         }
+    }
+
+    // MARK: - About Section
+
+    private var aboutSection: some View {
+        VStack(spacing: 12) {
+            sectionHeader(icon: "text.book.closed.fill", title: "About", subtitle: "The art within the garden")
+
+            VStack(spacing: 0) {
+                aboutParagraph(
+                    icon: "music.note.list",
+                    title: "The Santur",
+                    body: "The santur is a 72-string instrument you strike with small wooden hammers. I grew up hearing it at family gatherings and it always felt like it belonged in a garden somehow. Nothing here is recorded. I wrote the synthesis from scratch so every note is generated live. You can drag your finger across the pool to play it too."
+                )
+
+                cardDivider
+
+                aboutParagraph(
+                    icon: "waveform.path",
+                    title: "Dastgah-e Shur",
+                    body: "Shur is one of the main melodic systems in Persian music. The tuning isn\u{2019}t like Western scales. I spent a lot of time reading Hormoz Farhat\u{2019}s research to get the microtonal intervals right, because without them it just sounds wrong. The melody moves through seven gushehs, which are like emotional chapters. It never plays the same way twice."
+                )
+
+                cardDivider
+
+                aboutParagraph(
+                    icon: "sparkles",
+                    title: "The Garden",
+                    body: "Touch the water to place a lily pad. Tap the lily pad and it blooms into a lotus. Each lotus holds a verse from Hafez, Rumi, Saadi, Khayyam, or Ferdowsi. The more poems you find, the more alive the garden becomes. The water gets warmer, new particles appear, the light changes. I wanted it to feel like the garden remembers you."
+                )
+
+                cardDivider
+
+                aboutParagraph(
+                    icon: "bird",
+                    title: "The Nightingale",
+                    body: "In Persian poetry the nightingale is always in love with the rose. It keeps singing even though the rose never answers. I think that\u{2019}s beautiful. In the app, the nightingale shows up when it feels like you\u{2019}ve been patient with the garden. It brings its own verses."
+                )
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(
+                        LinearGradient(
+                            colors: [gold.opacity(0.05), cardColor],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(gold.opacity(0.15), lineWidth: 0.5)
+                    )
+            )
+        }
+    }
+
+    private func aboutParagraph(icon: String, title: String, body: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 15))
+                    .foregroundStyle(darkGold)
+                    .frame(width: 24)
+
+                Text(title)
+                    .font(.system(size: labelSize, weight: .semibold, design: .serif))
+                    .foregroundStyle(gold)
+            }
+
+            Text(body)
+                .font(.system(size: captionSize, weight: .regular, design: .serif))
+                .foregroundStyle(textPrimary.opacity(0.7))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Credits Section

@@ -22,6 +22,24 @@ final class SanturSynthesizer: @unchecked Sendable {
     var isPlaying: Bool = false
     let sampleRate: Double
 
+    // MARK: - User Note Queue (lock-free SPSC ring buffer)
+
+    private struct UserNote {
+        var degree: Int
+        var velocity: Float
+    }
+    private let userNoteCapacity = 16
+    private var userNoteBuffer = [UserNote](repeating: UserNote(degree: 0, velocity: 0), count: 16)
+    private var userNoteWriteIndex: Int = 0  // written by main thread
+    private var userNoteReadIndex: Int = 0   // read by render thread
+
+    /// Called from main thread — enqueues a note for the audio render thread.
+    func queueUserStrike(degree: Int, velocity: Float) {
+        let idx = userNoteWriteIndex % userNoteCapacity
+        userNoteBuffer[idx] = UserNote(degree: degree, velocity: velocity)
+        userNoteWriteIndex += 1
+    }
+
     // MARK: - Dastgah-e Shur in D — Measured Cents (Shafiei/Farhat)
 
     private let centsFromD4: [Double] = [
@@ -243,6 +261,15 @@ final class SanturSynthesizer: @unchecked Sendable {
     // MARK: - Render
 
     func render(frameCount: Int, output: UnsafeMutablePointer<Float>) {
+        // Drain user-triggered notes (from drag-to-play)
+        while userNoteReadIndex < userNoteWriteIndex {
+            let idx = userNoteReadIndex % userNoteCapacity
+            let note = userNoteBuffer[idx]
+            userNoteReadIndex += 1
+            let freq = frequencyForDegree(note.degree, ascending: true)
+            strikeNote(frequency: freq, velocity: note.velocity)
+        }
+
         let vol = volume
         let playing = isPlaying
         for i in 0..<frameCount {
