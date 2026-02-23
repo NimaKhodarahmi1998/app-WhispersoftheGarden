@@ -242,15 +242,6 @@ struct OptionsView: View {
 
                 cardDivider
 
-                // Thanks
-                creditGroup(title: "Special thanks") {
-                    creditLine("Ghazal, Roman, Caio, Santo, Domenico & Marco")
-                    creditLine("My family and friends")
-                    creditLine("Every learner and mentor at the Apple Developer Academy at UniNa", subtle: true)
-                }
-
-                cardDivider
-
                 // Dedication
                 VStack(spacing: 6) {
                     Text("Dedicated to all the fallen")
