@@ -662,6 +662,7 @@ enum SFXBufferGen {
 
 /// Garden-aware haptics — every touch should feel like the garden responding.
 /// Intensities are deliberately low; this is a calming, meditative app.
+@MainActor
 enum Haptics {
 
     /// Finger touches still water — soft yielding ripple.

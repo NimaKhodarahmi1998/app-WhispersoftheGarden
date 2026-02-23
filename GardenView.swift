@@ -32,14 +32,6 @@ struct Firefly: Identifiable {
     var drift: CGFloat
 }
 
-struct WaterRipple: Identifiable {
-    let id = UUID()
-    var center: CGPoint
-    var radius: CGFloat
-    var opacity: Double
-    var createdAt: Date
-}
-
 enum MovementStyle: String, CaseIterable, Codable {
     case gentle, wavy, circular, zigzag, stillness
 }
@@ -71,8 +63,8 @@ struct GardenView: View {
     @State private var pads: [Pad] = []
     @State private var time: TimeInterval = 0
     @State private var fireflies: [Firefly] = []
-    @State private var waterRipples: [WaterRipple] = []
     @State private var petalBurst = 0
+    private let waterBridge = WaterRendererBridge()
     @State private var breathingIntensity: CGFloat = 0
 
     // Nightingale state
@@ -164,6 +156,14 @@ struct GardenView: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
+                WaterMetalView(bridge: waterBridge,
+                               isActive: isActive,
+                               reduceMotion: reduceMotion)
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipShape(PoolWaterHitShape())
+                    .allowsHitTesting(false)
+                    .ignoresSafeArea()
+
                 PoolWaterHitShape()
                     .fill(.clear)
                     .contentShape(PoolWaterHitShape())
@@ -173,13 +173,6 @@ struct GardenView: View {
                     .accessibilityLabel("Garden pool")
                     .accessibilityHint("Double tap to create a lily pad")
                     .accessibilityAddTraits(.isButton)
-
-                ForEach(waterRipples) { ripple in
-                    Circle()
-                        .stroke(Color.cyan.opacity(ripple.opacity), lineWidth: 1.2)
-                        .frame(width: ripple.radius * 2, height: ripple.radius * 2)
-                        .position(ripple.center)
-                }
 
                 ForEach(pads) { pad in
                     renderPad(pad, in: geo.size)
@@ -429,7 +422,6 @@ struct GardenView: View {
             } else {
                 breathingIntensity = sin(time * 0.3) * 0.5 + 0.5
                 updateFireflies(dt: dt, screenSize: UIScreen.main.bounds.size)
-                updateWaterRipples()
             }
 
             // Timer-driven bounding flight — updated every frame
@@ -511,7 +503,7 @@ struct GardenView: View {
 
         let separated = findNonOverlappingSpot(near: safePoint, screenSize: size)
         createLilyPad(at: separated)
-        createWaterRipple(at: location)
+        waterBridge.addRipple(at: normalized)
         audio.playSFX(.waterDrop)
         audio.playSFX(.lilyPadAppear)
         Haptics.waterTouch()
@@ -1538,28 +1530,6 @@ struct GardenView: View {
         }
     }
 
-    private func createWaterRipple(at position: CGPoint) {
-        for i in 0..<2 {
-            let ripple = WaterRipple(
-                center: position,
-                radius: 15,
-                opacity: 0.4 - Double(i) * 0.1,
-                createdAt: Date().addingTimeInterval(Double(i) * 0.08)
-            )
-            waterRipples.append(ripple)
-        }
-    }
-
-    private func updateWaterRipples() {
-        let now = Date()
-        waterRipples = waterRipples.filter { now.timeIntervalSince($0.createdAt) < 1.2 }
-
-        for index in waterRipples.indices {
-            let age = now.timeIntervalSince(waterRipples[index].createdAt)
-            waterRipples[index].radius = 15 + CGFloat(age) * 40
-            waterRipples[index].opacity = max(0, waterRipples[index].opacity - age * 0.35)
-        }
-    }
 
     private func spawnFirefly(screenSize: CGSize, randomY: Bool = false) {
         let baseOp = Double.random(in: 0.4...0.7)

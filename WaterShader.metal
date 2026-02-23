@@ -62,8 +62,8 @@ static float fbm(float2 p) {
 
 // ─── Pool Polygon Masking ───────────────────────────────────────────
 
-// Point-in-polygon via ray casting
-static bool pointInPool(float2 p, constant float2 *verts) {
+// Point-in-polygon via ray casting (thread-local copy of vertices)
+static bool pointInPool(float2 p, thread float2 *verts) {
     bool inside = false;
     int j = 4;
     for (int i = 0; i < 5; i++) {
@@ -79,7 +79,7 @@ static bool pointInPool(float2 p, constant float2 *verts) {
 }
 
 // Signed distance to the nearest polygon edge (approximate)
-static float distToPoolEdge(float2 p, constant float2 *verts) {
+static float distToPoolEdge(float2 p, thread float2 *verts) {
     float minDist = 1e10;
     int j = 4;
     for (int i = 0; i < 5; i++) {
@@ -176,11 +176,19 @@ fragment float4 waterFragment(VertexOut in [[stage_in]],
     float time = u.time;
 
     // ── Pool masking ──
-    if (!pointInPool(uv, u.poolVertices)) {
+    // Copy pool vertices to thread-local array for helper functions
+    float2 verts[5];
+    verts[0] = u.poolVertices[0];
+    verts[1] = u.poolVertices[1];
+    verts[2] = u.poolVertices[2];
+    verts[3] = u.poolVertices[3];
+    verts[4] = u.poolVertices[4];
+
+    if (!pointInPool(uv, verts)) {
         return float4(0.0);
     }
 
-    float edgeDist = distToPoolEdge(uv, u.poolVertices);
+    float edgeDist = distToPoolEdge(uv, verts);
     float edgeFade = smoothstep(0.0, 0.04, edgeDist);
 
     // ── Wave height + ripples ──

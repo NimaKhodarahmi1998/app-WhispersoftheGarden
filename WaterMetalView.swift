@@ -39,7 +39,8 @@ private struct ActiveRipple {
 
 // MARK: - Bridge (SwiftUI → Metal communication)
 
-final class WaterRendererBridge: @unchecked Sendable {
+@MainActor
+final class WaterRendererBridge {
     fileprivate var renderer: WaterRenderer?
 
     func addRipple(at normalizedPoint: CGPoint) {
@@ -50,7 +51,8 @@ final class WaterRendererBridge: @unchecked Sendable {
 
 // MARK: - Renderer
 
-final class WaterRenderer: NSObject, MTKViewDelegate, @unchecked Sendable {
+@MainActor
+final class WaterRenderer: NSObject, MTKViewDelegate {
 
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
