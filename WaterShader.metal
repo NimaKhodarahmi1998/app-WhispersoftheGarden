@@ -188,11 +188,11 @@ static float rippleHeight(float2 uv, float4 ripple, float time) {
     float seed = ripple.w;
 
     // Per-ripple variation from seed
-    float speedVar    = 0.10 + hash1(seed) * 0.06;           // 0.10–0.16
-    float freqVar     = 90.0 + hash1(seed * 2.7) * 60.0;    // 90–150 (ring density)
-    float ampVar      = 0.03 + hash1(seed * 5.1) * 0.025;   // 0.03–0.055
-    float widthVar    = 0.018 + hash1(seed * 3.3) * 0.014;   // 0.018–0.032
-    float decayVar    = 1.1 + hash1(seed * 7.9) * 0.6;       // 1.1–1.7
+    float speedVar    = 0.11 + hash1(seed) * 0.07;           // 0.11–0.18
+    float freqVar     = 85.0 + hash1(seed * 2.7) * 65.0;    // 85–150 (ring density)
+    float ampVar      = 0.045 + hash1(seed * 5.1) * 0.035;  // 0.045–0.08
+    float widthVar    = 0.022 + hash1(seed * 3.3) * 0.016;   // 0.022–0.038
+    float decayVar    = 1.0 + hash1(seed * 7.9) * 0.5;       // 1.0–1.5 (slower decay)
 
     float2 center = ripple.xy;
 
@@ -213,14 +213,14 @@ static float rippleHeight(float2 uv, float4 ripple, float time) {
 
     // Decay over time
     float decay = exp(-age * decayVar);
-    // Fade at distance
-    float distFade = exp(-dist * 2.5);
+    // Fade at distance (gentler falloff = ripples travel further)
+    float distFade = exp(-dist * 1.8);
 
     float h = (ring1 * envelope + ring2 * trailEnvelope) * decay * distFade * ampVar;
 
     // Add tiny asymmetric wobble from noise (no ripple is perfectly circular)
     float wobble = gnoise(float2(atan2(uv.y - center.y, uv.x - center.x) * 3.0,
-                                  dist * 20.0 + seed)) * 0.15;
+                                  dist * 20.0 + seed)) * 0.18;
     h *= (1.0 + wobble);
 
     return h;
@@ -354,9 +354,9 @@ fragment float4 waterFragment(VertexOut in [[stage_in]],
     c *= 0.12;
 
     // ── Water color ──
-    float3 deepColor    = float3(0.02, 0.07, 0.13);
-    float3 shallowColor = float3(0.05, 0.14, 0.20);
-    float3 tileHintColor = float3(0.04, 0.10, 0.16);
+    float3 deepColor    = float3(0.03, 0.12, 0.32);
+    float3 shallowColor = float3(0.06, 0.20, 0.40);
+    float3 tileHintColor = float3(0.04, 0.15, 0.35);
 
     // Depth: center is deeper
     float2 poolCenter = float2(0.65, 0.82);
@@ -369,13 +369,13 @@ fragment float4 waterFragment(VertexOut in [[stage_in]],
     baseColor = mix(baseColor, tileHintColor, colorNoise * 0.25);
 
     // Surface texture adds subtle brightness variation
-    baseColor += float3(0.008, 0.015, 0.020) * (tex - 0.5);
+    baseColor += float3(0.006, 0.014, 0.025) * (tex - 0.5);
 
     // Wave-driven color shift
-    baseColor += float3(0.01, 0.02, 0.025) * h * 6.0;
+    baseColor += float3(0.008, 0.02, 0.03) * h * 6.0;
 
-    // Caustic light
-    float3 causticColor = float3(0.12, 0.22, 0.28) * c;
+    // Caustic light (blue-tinted)
+    float3 causticColor = float3(0.10, 0.25, 0.45) * c;
 
     // Specular (warm white with slight blue tint)
     float3 specColor = float3(0.85, 0.92, 1.0) * totalSpec;
@@ -384,13 +384,13 @@ fragment float4 waterFragment(VertexOut in [[stage_in]],
     float3 finalColor = baseColor + causticColor + specColor;
 
     // ── Alpha ──
-    float alpha = 0.28;
+    float alpha = 0.38;
     alpha += totalSpec * 0.35;
     alpha += h * 0.6;
     alpha += c * 0.2;
     alpha += (tex - 0.5) * 0.06;  // texture adds slight alpha variation
 
-    alpha = clamp(alpha, 0.0, 0.55);
+    alpha = clamp(alpha, 0.0, 0.65);
     alpha *= edgeFade;
 
     return float4(finalColor, alpha);
