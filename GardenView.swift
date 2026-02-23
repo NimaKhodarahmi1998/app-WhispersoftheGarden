@@ -64,7 +64,7 @@ struct GardenView: View {
     @State private var time: TimeInterval = 0
     @State private var fireflies: [Firefly] = []
     @State private var petalBurst = 0
-    private let waterBridge = WaterRendererBridge()
+    @State private var waterBridge = WaterRendererBridge()
     @State private var breathingIntensity: CGFloat = 0
 
     // Nightingale state
