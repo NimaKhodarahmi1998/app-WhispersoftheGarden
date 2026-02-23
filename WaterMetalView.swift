@@ -35,6 +35,7 @@ struct WaterUniforms {
 private struct ActiveRipple {
     var position: SIMD2<Float>   // normalized coords
     var birthTime: Float         // in shader-time seconds
+    var seed: Float              // random seed for per-ripple variation
 }
 
 // MARK: - Bridge (SwiftUI → Metal communication)
@@ -110,7 +111,8 @@ final class WaterRenderer: NSObject, MTKViewDelegate {
 
     func addRipple(at pos: SIMD2<Float>) {
         let currentTime = Float(CFAbsoluteTimeGetCurrent() - startTime)
-        ripples.append(ActiveRipple(position: pos, birthTime: currentTime))
+        let seed = Float.random(in: 1.0...1000.0)
+        ripples.append(ActiveRipple(position: pos, birthTime: currentTime, seed: seed))
         if ripples.count > maxRipples {
             ripples.removeFirst()
         }
@@ -145,7 +147,8 @@ final class WaterRenderer: NSObject, MTKViewDelegate {
                 if i < ripples.count {
                     base[i] = SIMD4<Float>(ripples[i].position.x,
                                            ripples[i].position.y,
-                                           ripples[i].birthTime, 0)
+                                           ripples[i].birthTime,
+                                           ripples[i].seed)
                 } else {
                     base[i] = .zero
                 }
