@@ -90,6 +90,7 @@ struct GardenView: View {
     @ScaledMetric(relativeTo: .callout) private var whisperSize: CGFloat = 16
     @ScaledMetric(relativeTo: .body) private var approachWhisperSize: CGFloat = 18
 
+    @State private var viewSize: CGSize = .zero
     @State private var showPoem = false
     @State private var currentPoem: Poem?
     @State private var pads: [Pad] = []
@@ -254,6 +255,8 @@ struct GardenView: View {
             ZStack {
                 Color.black
                     .ignoresSafeArea()
+                    .onAppear { viewSize = geo.size }
+                    .onChange(of: geo.size) { newSize in viewSize = newSize }
 
                 Image("GardenView")
                     .resizable()
@@ -698,7 +701,7 @@ struct GardenView: View {
             loadGardenState()
 
             for _ in 0..<gardenFireflyCount {
-                spawnFirefly(screenSize: UIScreen.main.bounds.size, randomY: true)
+                spawnFirefly(screenSize: viewSize, randomY: true)
             }
 
             // Initialize auto-ripple timer
@@ -770,7 +773,7 @@ struct GardenView: View {
                 breathingIntensity = 0.5
             } else {
                 breathingIntensity = sin(time * 0.3) * 0.5 + 0.5
-                updateFireflies(dt: dt, screenSize: UIScreen.main.bounds.size)
+                updateFireflies(dt: dt, screenSize: viewSize)
             }
 
             // Long-press: slow ripples during hold + glow build
@@ -781,8 +784,8 @@ struct GardenView: View {
                 if rippleIndex > longPressRippleCount {
                     longPressRippleCount = rippleIndex
                     let normalized = CGPoint(
-                        x: longPressLocation.x / UIScreen.main.bounds.size.width,
-                        y: longPressLocation.y / UIScreen.main.bounds.size.height
+                        x: longPressLocation.x / viewSize.width,
+                        y: longPressLocation.y / viewSize.height
                     )
                     waterBridge.addRipple(at: normalized)
                 }
@@ -797,7 +800,7 @@ struct GardenView: View {
                !showPoem, !showNightingaleCouplet, !showApproachFeather,
                let deadline = nightingalePerchDeadline, now >= deadline {
                 nightingalePerchDeadline = nil
-                handleNightingaleAutoDeparture(in: UIScreen.main.bounds.size)
+                handleNightingaleAutoDeparture(in: viewSize)
             }
 
             // Timer-driven bounding flight — updated every frame
@@ -1071,7 +1074,7 @@ struct GardenView: View {
 
     private func updatePads(dt: TimeInterval) {
         let s = CGFloat(dt / 0.08)
-        let screenSize = UIScreen.main.bounds.size
+        let screenSize = viewSize
         let minPx = padMinPixels(screenSize)
 
         for index in pads.indices {
@@ -1249,7 +1252,7 @@ struct GardenView: View {
     /// If ALL pads become lotuses, triggers a full bloom moment.
     private func triggerLotusResonance(newLotusIndex: Int) {
         let newPos = pads[newLotusIndex].anchor
-        let screenSize = UIScreen.main.bounds.size
+        let screenSize = viewSize
 
         // Collect other lotuses sorted by distance to the new one
         var otherLotuses: [(index: Int, dist: CGFloat)] = []

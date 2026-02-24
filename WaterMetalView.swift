@@ -549,7 +549,7 @@ struct WaterMetalView: UIViewRepresentable {
         mtkView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         mtkView.isOpaque = false
         mtkView.backgroundColor = .clear
-        mtkView.preferredFramesPerSecond = 30
+        mtkView.preferredFramesPerSecond = 60
         mtkView.layer.isOpaque = false
 
         if let renderer = WaterRenderer(mtkView: mtkView) {
