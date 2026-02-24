@@ -57,6 +57,6 @@ struct AdaptiveColors {
             : Color(red: 0.75, green: 0.28, blue: 0.38)
         textPrimary = isDark ? .white : Color(red: 0.15, green: 0.12, blue: 0.08)
         textSecondary = textPrimary.opacity(0.6)
-        textTertiary = textPrimary.opacity(0.35)
+        textTertiary = textPrimary.opacity(0.45)
     }
 }

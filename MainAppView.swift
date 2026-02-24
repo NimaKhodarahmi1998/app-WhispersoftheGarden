@@ -15,7 +15,8 @@ struct MainAppView: View {
     @State private var isTabTransitioning = false
     @State private var pendingTab: Int? = nil
     @State private var windDirection: PetalWindDirection = .rightToLeft
-    @State private var libraryNavPath = NavigationPath()
+    @State private var libraryNavID = UUID()
+    @ScaledMetric(relativeTo: .body) private var tabIconSize: CGFloat = 22
 
     // Persian palette (centralized in PersianColors)
     private let gold = Color.gardenGold
@@ -33,9 +34,10 @@ struct MainAppView: View {
                 .allowsHitTesting(selectedTab == 0 && !isTabTransitioning)
 
             // Library — always alive (no creation spike on tab switch), paused when off-screen
-            NavigationStack(path: $libraryNavPath) {
+            NavigationStack {
                 LibraryView(showMainApp: $showMainApp, isActive: selectedTab == 1 && showMainApp && !isTabTransitioning)
             }
+            .id(libraryNavID)
             .opacity(selectedTab == 1 ? 1 : 0)
             .allowsHitTesting(selectedTab == 1 && !isTabTransitioning)
 
@@ -93,7 +95,7 @@ struct MainAppView: View {
             }
         } label: {
             Image(systemName: icon)
-                .font(.system(size: 22, weight: .medium))
+                .font(.system(size: tabIconSize, weight: .medium))
                 .foregroundStyle(isActive ? gold : .white.opacity(0.7))
                 .shadow(color: isActive ? gold.opacity(0.6) : .clear, radius: 8)
                 .frame(width: 48, height: 48)
@@ -111,9 +113,9 @@ struct MainAppView: View {
 
         // Re-tap library while already on library → pop to root
         if tab == selectedTab {
-            if tab == 1 && !libraryNavPath.isEmpty {
+            if tab == 1 {
                 audio.playSFX(.gentleTap)
-                withAnimation { libraryNavPath = NavigationPath() }
+                libraryNavID = UUID()
             }
             return
         }

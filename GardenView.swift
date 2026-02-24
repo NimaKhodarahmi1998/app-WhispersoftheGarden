@@ -112,6 +112,8 @@ struct GardenView: View {
     @State private var poolPoemsSinceNightingale: Int = 0
     @State private var nightingaleWhisperOpacity: Double = 0
     @State private var currentDepartureWhisper: String = ""
+    @State private var tutorialCompleteWhisperOpacity: Double = 0
+    @State private var hasShownTutorialCompleteWhisper: Bool = false
     @State private var showApproachFeather = false
     @State private var featherFallProgress: CGFloat = 0
     @State private var featherOpacity: Double = 0
@@ -220,9 +222,6 @@ struct GardenView: View {
     @State private var isLongPressing: Bool = false
     @State private var longPressRippleCount: Int = 0
     @State private var longPressGlowOpacity: Double = 0
-    @State private var hasShownLongPressHint: Bool = false
-    @State private var longPressWhisperOpacity: Double = 0
-    @State private var longPressWhisperText: String = ""
 
     // Drag-to-play water santur
     @State private var isDraggingWater = false
@@ -230,8 +229,6 @@ struct GardenView: View {
     @State private var lastDragRippleTime: TimeInterval = 0
     @State private var dragNoteGlowLocation: CGPoint = .zero
     @State private var dragNoteGlowOpacity: Double = 0
-    @State private var dragHintOpacity: Double = 0
-    @State private var hasShownDragHint: Bool = false
 
     // Variable nightingale timing
     @State private var nightingaleThreshold: Int = 3
@@ -325,12 +322,7 @@ struct GardenView: View {
                                     isDraggingWater = true
                                     isLongPressing = false
 
-                                    // Dismiss drag hint on first actual drag
-                                    if dragHintOpacity > 0 {
-                                        withAnimation(.easeOut(duration: 0.3)) {
-                                            dragHintOpacity = 0
-                                        }
-                                    }
+                                    hintStore.markPoolDragged()
 
                                     // Map X position to scale degree across pool
                                     let poolMinX: CGFloat = 0.21
@@ -641,25 +633,55 @@ struct GardenView: View {
                     .position(x: geo.size.width * 0.5, y: geo.size.height * 0.42)
                     .allowsHitTesting(false)
 
-                // Long-press discovery whisper
-                Text(longPressWhisperText)
-                    .font(.system(size: whisperSize, weight: .light, design: .serif))
-                    .italic()
-                    .foregroundColor(Color(red: 0.85, green: 0.92, blue: 1.0))
-                    .shadow(color: .black.opacity(0.8), radius: 8)
-                    .opacity(longPressWhisperOpacity)
-                    .position(x: geo.size.width * 0.5, y: geo.size.height * 0.55)
-                    .allowsHitTesting(false)
+                // Tutorial-complete moment — lotus + golden halo + text
+                // Vignette
+                RadialGradient(
+                    colors: [.clear, Color.black.opacity(0.50)],
+                    center: .center,
+                    startRadius: 80,
+                    endRadius: geo.size.width * 0.7
+                )
+                .ignoresSafeArea()
+                .opacity(tutorialCompleteWhisperOpacity)
+                .allowsHitTesting(false)
 
-                // Drag-to-play discovery hint
-                Text("Trace the water to play\u{2026}")
-                    .font(.system(size: whisperSize, weight: .light, design: .serif))
-                    .italic()
-                    .foregroundColor(Color(red: 0.75, green: 0.88, blue: 1.0))
-                    .shadow(color: .black.opacity(0.8), radius: 8)
-                    .opacity(dragHintOpacity)
-                    .position(x: geo.size.width * 0.5, y: geo.size.height * 0.62)
-                    .allowsHitTesting(false)
+                VStack(spacing: 4) {
+                    ZStack {
+                        // Golden halo behind lotus
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [
+                                        Color.persianGold.opacity(0.35),
+                                        Color.persianGold.opacity(0.12),
+                                        Color.persianGold.opacity(0.04),
+                                        .clear
+                                    ],
+                                    center: .center,
+                                    startRadius: 0,
+                                    endRadius: 130
+                                )
+                            )
+                            .frame(width: 260, height: 260)
+                            .blur(radius: 20)
+
+                        Image("LotusFull")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 120, height: 120)
+                            .shadow(color: Color.persianGold.opacity(0.5), radius: 16)
+                    }
+
+                    Text("The garden is yours now\u{2026}")
+                        .font(.system(size: 20, weight: .medium, design: .serif))
+                        .italic()
+                        .foregroundColor(Color(red: 1.0, green: 0.95, blue: 0.80))
+                        .shadow(color: Color.persianGold.opacity(0.5), radius: 12)
+                        .shadow(color: .black.opacity(0.8), radius: 6, x: 0, y: 2)
+                }
+                .opacity(tutorialCompleteWhisperOpacity)
+                .position(x: geo.size.width * 0.5, y: geo.size.height * 0.45)
+                .allowsHitTesting(false)
 
                 // Golden feather + whisper — nightingale approaching hint
                 if showApproachFeather || showApproachWhisper {
@@ -868,25 +890,22 @@ struct GardenView: View {
         hintStore.markPoolTapped()
         hintStore.markPoolTappedAgain()
         hintStore.markPoolTappedThrice()
-        showDragHintIfNeeded()
         saveGardenState()
     }
 
-    /// Shows "Trace the water to play…" hint after the user's first pool tap.
-    private func showDragHintIfNeeded() {
-        guard !hasShownDragHint else { return }
-        hasShownDragHint = true
-        // Appear after a short delay so it doesn't clash with the tap itself
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
-            guard !isDraggingWater else { return }  // they already discovered it
-            withAnimation(.easeIn(duration: 0.8)) {
-                dragHintOpacity = 0.9
+    /// One-time whisper after the tutorial completes (first nightingale tap).
+    private func showTutorialCompleteWhisper() {
+        guard !hasShownTutorialCompleteWhisper else { return }
+        hasShownTutorialCompleteWhisper = true
+        // Delay so it appears after the departure whisper fades (~6s after tap)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 7.0) {
+            withAnimation(.easeIn(duration: 1.2)) {
+                tutorialCompleteWhisperOpacity = 1.0
             }
-            // Auto-fade after 4 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-                withAnimation(.easeOut(duration: 1.2)) {
-                    dragHintOpacity = 0
-                }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 13.0) {
+            withAnimation(.easeOut(duration: 1.5)) {
+                tutorialCompleteWhisperOpacity = 0
             }
         }
     }
@@ -900,6 +919,7 @@ struct GardenView: View {
         guard !showPoem, !showNightingaleCouplet,
               !nightingaleInFlight, !showApproachFeather else { return }
 
+        hintStore.markPoolLongPressed()
         let lotusCount = pads.filter(\.isLotus).count
 
         if lotusCount <= 1 {
@@ -1223,36 +1243,6 @@ struct GardenView: View {
         poolPoemsSinceNightingale += 1
         saveGardenState()
 
-        // Long-press discovery: show once when 2+ lotuses exist and tutorial is done
-        checkLongPressDiscoveryHint()
-    }
-
-    /// Shows a one-time whisper hinting at the long-press mechanic.
-    private func checkLongPressDiscoveryHint() {
-        guard !hasShownLongPressHint,
-              hintStore.isTutorialComplete,
-              pads.filter(\.isLotus).count >= 2 else { return }
-
-        hasShownLongPressHint = true
-        UserDefaults.standard.set(true, forKey: Self.longPressHintShownKey)
-
-        let whispers = [
-            "Still water runs deep\u{2026} try holding the surface\u{2026}",
-            "Linger on the water\u{2026} patience reveals more\u{2026}",
-        ]
-        longPressWhisperText = whispers.randomElement()!
-
-        // Delay so it appears after the poem overlay is dismissed
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
-            withAnimation(.easeIn(duration: 1.2)) {
-                longPressWhisperOpacity = 1.0
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 14.0) {
-            withAnimation(.easeOut(duration: 1.5)) {
-                longPressWhisperOpacity = 0
-            }
-        }
     }
 
     /// Lotus resonance: existing lotuses glow in sequence nearest-first, each triggers a ripple.
@@ -1360,10 +1350,15 @@ struct GardenView: View {
               !showNightingaleCouplet,
               !showApproachFeather else { return }
 
+        let wasFirstNightingale = !hintStore.hasEverTappedNightingale
         hintStore.markNightingaleTapped()
         audio.playSFX(.nightingaleFarewell)
         audio.playSFX(.wingDeparture)
         Haptics.nightingaleTap()
+
+        if wasFirstNightingale {
+            showTutorialCompleteWhisper()
+        }
         nightingaleIsPerched = false
         nightingalePerchDeadline = nil
         nightingaleIsAutoDeparting = false
@@ -2064,7 +2059,8 @@ struct GardenView: View {
 
     private func hintPosition(for stage: GardenHintStage, in size: CGSize) -> CGPoint {
         switch stage {
-        case .tapPool, .tapPoolAgain, .tapPoolThrice:
+        case .tapPool, .tapPoolAgain, .tapPoolThrice,
+             .dragPool, .longPressPool:
             return CGPoint(x: 0.70 * size.width, y: 0.82 * size.height)
         case .tapLilyPad, .tapSecondLilyPad, .tapThirdLilyPad:
             if let firstPad = pads.first(where: { !$0.isLotus }) {
@@ -2269,7 +2265,6 @@ struct GardenView: View {
     private static let poolPoemsSinceNightingaleKey = "garden_pool_poems_since_nightingale"
     private static let nightingalePerchIndexKey = "garden_nightingale_perch_index"
     private static let nightingaleThresholdKey = "garden_nightingale_threshold"
-    private static let longPressHintShownKey = "garden_long_press_hint_shown"
 
     private func saveGardenState() {
         let saved = pads.map { pad in
@@ -2303,9 +2298,6 @@ struct GardenView: View {
         // Restore variable nightingale threshold (default 3 if not set)
         let savedThreshold = UserDefaults.standard.integer(forKey: Self.nightingaleThresholdKey)
         nightingaleThreshold = (savedThreshold >= 2 && savedThreshold <= 5) ? savedThreshold : 3
-
-        // Restore long-press hint flag
-        hasShownLongPressHint = UserDefaults.standard.bool(forKey: Self.longPressHintShownKey)
 
         // Restore pads
         guard let data = UserDefaults.standard.data(forKey: Self.gardenPadsKey),

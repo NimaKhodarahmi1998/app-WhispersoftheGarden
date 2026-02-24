@@ -76,6 +76,11 @@ struct LibraryView: View {
     @ScaledMetric(relativeTo: .body) private var bodySize: CGFloat = 19
     @ScaledMetric(relativeTo: .headline) private var headlineSize: CGFloat = 22
     @ScaledMetric(relativeTo: .body) private var tileMinHeight: CGFloat = 200
+    @ScaledMetric(relativeTo: .title2) private var emptyIconSize: CGFloat = 48
+    @ScaledMetric(relativeTo: .title3) private var favEmptyIconSize: CGFloat = 32
+    @ScaledMetric(relativeTo: .largeTitle) private var watermarkSize: CGFloat = 52
+    @ScaledMetric(relativeTo: .caption2) private var favHeartSize: CGFloat = 9
+    @ScaledMetric(relativeTo: .footnote) private var potdIconSize: CGFloat = 14
 
     // All poems (revealed + locked)
     private var allPoems: [Poem] { PoemLibrary.poems }
@@ -396,7 +401,7 @@ struct LibraryView: View {
             VStack(spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "sun.max.fill")
-                        .font(.system(size: 14))
+                        .font(.system(size: potdIconSize))
                         .foregroundStyle(gold)
                     Text("Poem of the Day")
                         .font(.system(size: footnoteSize, weight: .semibold, design: .serif))
@@ -511,7 +516,7 @@ struct LibraryView: View {
     private var favoritesEmptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "heart")
-                .font(.system(size: 32, weight: .thin))
+                .font(.system(size: favEmptyIconSize, weight: .thin))
                 .foregroundStyle(rose.opacity(0.4))
 
             Text("No favorites yet")
@@ -714,7 +719,7 @@ struct LibraryView: View {
                 .fill(accent.opacity(0.35))
                 .frame(width: 4, height: 4)
 
-            highlighted(poem.persian, baseColor: textPrimary.opacity(0.45))
+            highlighted(poem.persian, baseColor: textPrimary.opacity(0.6))
                 .font(.system(size: captionSize, weight: .medium, design: .serif))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -740,7 +745,7 @@ struct LibraryView: View {
             // Favorite indicator
             if revealedPoemsStore.isFavorite(poem) {
                 Image(systemName: "heart.fill")
-                    .font(.system(size: 9))
+                    .font(.system(size: favHeartSize))
                     .foregroundStyle(accent.opacity(0.5))
                     .padding(.top, 2)
             }
@@ -760,7 +765,7 @@ struct LibraryView: View {
 
                 // Poet monogram watermark
                 Text(poetInitial(poem.poet))
-                    .font(.system(size: 52, weight: .ultraLight, design: .serif))
+                    .font(.system(size: watermarkSize, weight: .ultraLight, design: .serif))
                     .foregroundStyle(accent.opacity(0.04))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.trailing, 8)
@@ -864,7 +869,7 @@ struct LibraryView: View {
             Spacer()
 
             Image(systemName: "leaf")
-                .font(.system(size: 48, weight: .thin))
+                .font(.system(size: emptyIconSize, weight: .thin))
                 .foregroundStyle(rose.opacity(0.4))
 
             VStack(spacing: 8) {
@@ -895,6 +900,7 @@ private struct LockedPoemTileView: View {
     @ScaledMetric(relativeTo: .caption) private var smallSize: CGFloat = 12
     @ScaledMetric(relativeTo: .footnote) private var footnoteSize: CGFloat = 14
     @ScaledMetric(relativeTo: .body) private var tileMinHeight: CGFloat = 190
+    @ScaledMetric(relativeTo: .body) private var lockIconSize: CGFloat = 18
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
@@ -907,7 +913,7 @@ private struct LockedPoemTileView: View {
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "lock.fill")
-                .font(.system(size: 18))
+                .font(.system(size: lockIconSize))
                 .foregroundStyle(accent.opacity(0.18))
 
             Text(poet)

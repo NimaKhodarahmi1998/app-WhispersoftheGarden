@@ -398,7 +398,7 @@ struct LandingPage: View {
                         Text("— Hafez")
                             .font(.system(size: isIPad ? quoteAttrBase * 1.43 : quoteAttrBase, design: .serif))
                     }
-                    .foregroundColor(Color.white.opacity(0.3))
+                    .foregroundColor(Color.white.opacity(0.55))
                     .multilineTextAlignment(.center)
                     .padding(.bottom, isIPad ? 30 : 16)
                     .opacity(showQuote ? 1 : 0)

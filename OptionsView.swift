@@ -16,6 +16,11 @@ struct OptionsView: View {
     @ScaledMetric(relativeTo: .body) private var labelSize: CGFloat = 17
     @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 13
     @ScaledMetric(relativeTo: .headline) private var headlineSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .largeTitle) private var pageTitleSize: CGFloat = 34
+    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .body) private var rowIconSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .body) private var backIconSize: CGFloat = 18
+    @ScaledMetric(relativeTo: .caption2) private var creditLabelSize: CGFloat = 10
 
     // MARK: - Adaptive Colors
 
@@ -59,7 +64,7 @@ struct OptionsView: View {
                         homeButton
 
                         Text("Options")
-                            .font(.system(size: 34, weight: .bold, design: .serif))
+                            .font(.system(size: pageTitleSize, weight: .bold, design: .serif))
                             .foregroundStyle(gold)
 
                         Spacer()
@@ -262,7 +267,7 @@ struct OptionsView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
                 Image(systemName: icon)
-                    .font(.system(size: 15))
+                    .font(.system(size: iconSize))
                     .foregroundStyle(darkGold)
                     .frame(width: 24)
 
@@ -318,10 +323,19 @@ struct OptionsView: View {
 
                 cardDivider
 
+                // Illustrations
+                creditGroup(title: "Illustrations") {
+                    creditLine("Hand-drawn in Procreate")
+                    creditLine("Lily pads, lotuses, nightingale, backgrounds", subtle: true)
+                    creditLine("Painted in traditional Persian colors", subtle: true)
+                }
+
+                cardDivider
+
                 // Tools
                 creditGroup(title: "Built with") {
-                    creditLine("ProCreate")
-                    creditLine("Swift \u{2022} SwiftUI \u{2022} Swift Playgrounds")
+                    creditLine("Swift \u{2022} SwiftUI \u{2022} Metal")
+                    creditLine("AVFoundation \u{2022} Swift Playgrounds")
                     creditLine("Claude")
                 }
 
@@ -361,7 +375,7 @@ struct OptionsView: View {
     private func creditGroup<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
-                .font(.system(size: 10, weight: .semibold, design: .serif))
+                .font(.system(size: creditLabelSize, weight: .semibold, design: .serif))
                 .tracking(1.2)
                 .foregroundStyle(darkGold)
 
@@ -386,7 +400,7 @@ struct OptionsView: View {
             showOptions = false
         } label: {
             Image(systemName: "chevron.left")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: backIconSize, weight: .semibold))
                 .foregroundStyle(gold)
                 .frame(width: 36, height: 36)
                 .background(
@@ -436,7 +450,7 @@ struct OptionsView: View {
     ) -> some View {
         HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.system(size: 16))
+                .font(.system(size: rowIconSize))
                 .foregroundStyle(darkGold)
                 .frame(width: 26)
 
@@ -458,7 +472,7 @@ struct OptionsView: View {
     private func infoRow(icon: String, label: String, value: String) -> some View {
         HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.system(size: 16))
+                .font(.system(size: rowIconSize))
                 .foregroundStyle(darkGold)
                 .frame(width: 26)
 

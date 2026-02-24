@@ -35,23 +35,27 @@ struct GardenHintView: View {
         switch stage {
         case .tapPool:           return .persianTurquoise
         case .tapLilyPad:        return .persianSaffron
+        case .dragPool:          return .persianTurquoise
         case .tapPoolAgain:      return .persianTurquoise
         case .tapSecondLilyPad:  return .persianSaffron
         case .tapPoolThrice:     return .persianTurquoise
         case .tapThirdLilyPad:   return .persianSaffron
+        case .longPressPool:     return .persianTurquoise
         case .tapNightingale:    return .persianGold
         }
     }
 
     private var hintText: String {
         switch stage {
-        case .tapPool:           return "Touch the water\u{2026}"
-        case .tapLilyPad:        return "Gently, on the leaf\u{2026}"
-        case .tapPoolAgain:      return "The water longs for your return\u{2026}"
-        case .tapSecondLilyPad:  return "Each leaf holds a whispered verse\u{2026}"
-        case .tapPoolThrice:     return "Once more\u{2026} the garden listens\u{2026}"
-        case .tapThirdLilyPad:   return "A bloom carries a poet\u{2019}s heart\u{2026}"
-        case .tapNightingale:    return "The nightingale awaits\u{2026}"
+        case .tapPool:           return "Touch the water\u{2026} a leaf will appear"
+        case .tapLilyPad:        return "Tap the leaf\u{2026} it holds a hidden verse"
+        case .dragPool:          return "Trace the water to play Santur\u{2026}"
+        case .tapPoolAgain:      return "Touch the water again\u{2026} another leaf awaits"
+        case .tapSecondLilyPad:  return "Tap to bloom\u{2026} each lotus reveals a poem"
+        case .tapPoolThrice:     return "Once more\u{2026} the garden has more to give"
+        case .tapThirdLilyPad:   return "Bloom the leaf\u{2026} a poet\u{2019}s voice is inside"
+        case .longPressPool:     return "Linger on the water\u{2026} patience reveals more"
+        case .tapNightingale:    return "The nightingale carries a verse\u{2026} tap gently"
         }
     }
 
