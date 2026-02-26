@@ -5,6 +5,13 @@
 
 import SwiftUI
 
+private struct SectionAnchorKey: PreferenceKey {
+    nonisolated(unsafe) static var defaultValue: [Int: Anchor<CGRect>] = [:]
+    static func reduce(value: inout [Int: Anchor<CGRect>], nextValue: () -> [Int: Anchor<CGRect>]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
 // MARK: - Poet Biography
 
 private struct PoetBio: Identifiable {
@@ -20,45 +27,47 @@ private struct PoetBio: Identifiable {
             name: "Saadi Shirazi",
             years: "c. 1210 – 1292",
             homeland: "Shiraz, Persia",
-            bio: "Saadi left Shiraz as a young man and spent thirty years wandering through Baghdad, Damascus, Egypt, and beyond — sometimes as a student, sometimes as a prisoner of war. He came home and distilled everything he'd seen into the Golestan and Bustan, two books so full of practical wisdom and humanity that they became the most widely read works in the Persian language. His verse on human unity is carved at the entrance of the United Nations."
+            bio: "Saadi left Shiraz as a young man and spent thirty years wandering through Baghdad, Damascus, Egypt, and beyond. Sometimes as a student, sometimes as a prisoner of war. He came home and distilled everything he'd seen into the Golestan and Bustan, two books so full of practical wisdom and humanity that they became the most widely read works in the Persian language. His verse on human unity is carved at the entrance of the United Nations."
         ),
         PoetBio(
             id: "Hafez",
             name: "Hafez Shirazi",
             years: "c. 1315 – 1390",
             homeland: "Shiraz, Persia",
-            bio: "Hafez never left Shiraz, but Shiraz came to contain the whole world inside his poetry. He mastered the ghazal — a short lyric form — and used it to say things nobody else could get away with: love poems that were also prayers, drinking songs that were also philosophy, praise of beauty that quietly mocked the powerful. Iranians still open his Divan at random to seek guidance, a tradition called faal-e Hafez. Seven centuries later, he remains the most beloved poet in Iran."
+            bio: "Hafez never left Shiraz, but Shiraz came to contain the whole world inside his poetry. He mastered the ghazal, a short lyric form, and used it to say things nobody else could get away with: love poems that were also prayers, drinking songs that were also philosophy, praise of beauty that quietly mocked the powerful. Iranians still open his Divan at random to seek guidance, a tradition called faal-e Hafez. Seven centuries later, he remains the most beloved poet in Iran."
         ),
         PoetBio(
             id: "Khayyam",
             name: "Omar Khayyam",
             years: "1048 – 1131",
             homeland: "Nishapur, Persia",
-            bio: "Before he ever wrote a quatrain, Khayyam was one of the great mathematicians and astronomers of his age. He solved cubic equations, classified their geometric solutions, and calculated the length of the solar year with extraordinary precision. Then he turned that same clear-eyed mind toward the brevity of life and wrote the Rubaiyat — short, luminous poems about wine, time, and the strangeness of being alive at all. He didn't mourn impermanence. He marveled at it."
+            bio: "Before he ever wrote a quatrain, Khayyam was one of the great mathematicians and astronomers of his age. He solved cubic equations, classified their geometric solutions, and calculated the length of the solar year with extraordinary precision. Then he turned that same clear-eyed mind toward the brevity of life and wrote the Rubaiyat, short luminous poems about wine, time, and the strangeness of being alive at all. He didn't mourn impermanence. He marveled at it."
         ),
         PoetBio(
             id: "Rumi",
             name: "Jalal al-Din Rumi",
             years: "1207 – 1273",
             homeland: "Balkh (present-day Afghanistan)",
-            bio: "Rumi was a respected theologian and scholar in Konya until the wandering dervish Shams-e Tabrizi walked into his life and turned everything upside down. He abandoned his lectern, his reputation, his composure — and in the wreckage he found a voice that would produce the Masnavi, a 25,000-couplet spiritual epic he dictated while pacing, weeping, and sometimes dancing. He founded the Mevlevi order, whose whirling ceremony became one of the most recognizable images of Sufism. He is now the best-selling poet in the United States."
+            bio: "Rumi was a respected theologian and scholar in Konya until the wandering dervish Shams-e Tabrizi walked into his life and turned everything upside down. He abandoned his lectern, his reputation, his composure, and in the wreckage he found a voice that would produce the Masnavi, a 25,000-couplet spiritual epic he dictated while pacing, weeping, and sometimes dancing. He founded the Mevlevi order, whose whirling ceremony became one of the most recognizable images of Sufism. He is now the best-selling poet in the United States."
         ),
         PoetBio(
             id: "Ferdowsi",
             name: "Abolqasem Ferdowsi",
             years: "c. 940 – 1020",
             homeland: "Tus, Persia",
-            bio: "Ferdowsi spent over thirty years writing the Shahnameh — the Book of Kings — a 50,000-couplet epic that traces Iranian civilization from the creation of the world to the Arab conquest. He did it almost entirely alone, selling off his land to fund the work, because the Persian language was being swallowed by Arabic and he refused to let a civilization's memory disappear. The Shahnameh preserved not just stories but the language itself. Modern Persian exists in large part because one man in a village near Tus decided it was worth his entire life to save it."
+            bio: "Ferdowsi spent over thirty years writing the Shahnameh, the Book of Kings, a 50,000-couplet epic that traces Iranian civilization from the creation of the world to the Arab conquest. He did it almost entirely alone, selling off his land to fund the work, because the Persian language was being swallowed by Arabic and he refused to let a civilization's memory disappear. The Shahnameh preserved not just stories but the language itself. Modern Persian exists in large part because one man in a village near Tus decided it was worth his entire life to save it."
         )
     ]
 }
 
 struct LibraryView: View {
     @EnvironmentObject var revealedPoemsStore: RevealedPoemsStore
+    @EnvironmentObject var hintStore: GardenHintStore
     @Binding var showMainApp: Bool
     var isActive: Bool = true  // pause particles when off-screen
     private let audio = GardenAudioEngine.shared
     @State private var searchText = ""
+    @State private var tutorialTourStep: Int = -1  // -1 = hidden, 0-2 = three tour steps
     @State private var debouncedSearch = ""
     @State private var searchDebounceTask: Task<Void, Never>?
     @State private var selectedPoet: String? = nil
@@ -271,107 +280,129 @@ struct LibraryView: View {
             if revealedPoemsStore.getRevealedPoems().isEmpty && revealedPoemsStore.getRevealedNightingaleCouplets().isEmpty {
                 emptyStateView
             } else {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Poem of the Day
-                        if shouldShowPOTD, let potd = revealedPoemsStore.poemOfTheDay {
-                            poemOfTheDayCard(potd)
-                        }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            // Poem of the Day
+                            if shouldShowPOTD, let potd = revealedPoemsStore.poemOfTheDay {
+                                poemOfTheDayCard(potd)
+                            }
 
-                        // Filter bar
-                        filterBar
+                            // Filter bar
+                            filterBar
 
-                        // Favorites empty state
-                        if showFavoritesOnly && filteredPoems.isEmpty && filteredNightingaleCouplets.isEmpty {
-                            favoritesEmptyState
-                        }
+                            // Favorites empty state
+                            if showFavoritesOnly && filteredPoems.isEmpty && filteredNightingaleCouplets.isEmpty {
+                                favoritesEmptyState
+                            }
 
-                        // Lotus poems
-                        if !filteredPoems.isEmpty {
-                            sectionHeader(
-                                icon: "LotusFull",
-                                title: "From the Lotus",
-                                subtitle: "Verses that bloomed from the pool",
-                                count: revealedPoemsStore.revealedCount,
-                                total: revealedPoemsStore.totalPoemsCount
-                            )
+                            // Lotus poems
+                            if !filteredPoems.isEmpty {
+                                sectionHeader(
+                                    icon: "LotusFull",
+                                    title: "From the Lotus",
+                                    subtitle: "Verses that bloomed from the pool",
+                                    count: revealedPoemsStore.revealedCount,
+                                    total: revealedPoemsStore.totalPoemsCount
+                                )
+                                .id("tourLotus")
+                                .anchorPreference(key: SectionAnchorKey.self, value: .bounds) { [0: $0] }
 
-                            let lotusRevealed = revealedFilteredPoems
-                            let lotusIndex = Dictionary(uniqueKeysWithValues: lotusRevealed.enumerated().map { ($1.id, $0) })
+                                let lotusRevealed = revealedFilteredPoems
+                                let lotusIndex = Dictionary(uniqueKeysWithValues: lotusRevealed.enumerated().map { ($1.id, $0) })
 
-                            LazyVGrid(columns: tileColumns, spacing: 12) {
-                                ForEach(Array(filteredPoems.enumerated()), id: \.element.id) { _, poem in
-                                    if revealedPoemsStore.isRevealed(poem) {
-                                        let idx = lotusIndex[poem.id] ?? 0
-                                        NavigationLink(destination: PoemDetailView(poems: lotusRevealed, currentIndex: idx)) {
-                                            poemTile(poem)
+                                LazyVGrid(columns: tileColumns, spacing: 12) {
+                                    ForEach(Array(filteredPoems.enumerated()), id: \.element.id) { _, poem in
+                                        if revealedPoemsStore.isRevealed(poem) {
+                                            let idx = lotusIndex[poem.id] ?? 0
+                                            NavigationLink(destination: PoemDetailView(poems: lotusRevealed, currentIndex: idx)) {
+                                                poemTile(poem)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .simultaneousGesture(TapGesture().onEnded { audio.playSFX(.gentleTap) })
+                                            .accessibilityElement(children: .ignore)
+                                            .accessibilityLabel("\(poem.poet). \(poem.english)")
+                                            .accessibilityHint("Double tap to view full poem")
+                                        } else {
+                                            LockedPoemTileView(poet: poem.poet, accent: poetAccent(poem.poet))
                                         }
-                                        .buttonStyle(.plain)
-                                        .simultaneousGesture(TapGesture().onEnded { audio.playSFX(.gentleTap) })
-                                        .accessibilityElement(children: .ignore)
-                                        .accessibilityLabel("\(poem.poet). \(poem.english)")
-                                        .accessibilityHint("Double tap to view full poem")
-                                    } else {
-                                        LockedPoemTileView(poet: poem.poet, accent: poetAccent(poem.poet))
                                     }
                                 }
                             }
-                        }
 
-                        // Persian divider
-                        if !filteredPoems.isEmpty && !filteredNightingaleCouplets.isEmpty {
-                            persianDivider
-                        }
+                            // Persian divider
+                            if !filteredPoems.isEmpty && !filteredNightingaleCouplets.isEmpty {
+                                persianDivider
+                            }
 
-                        // Nightingale couplets
-                        if !filteredNightingaleCouplets.isEmpty {
-                            sectionHeader(
-                                icon: "Nightingale02",
-                                title: "From the Nightingale",
-                                subtitle: "Couplets gifted by the garden's songbird",
-                                count: revealedPoemsStore.revealedNightingaleCount,
-                                total: NightingaleCouplets.couplets.count
-                            )
+                            // Nightingale couplets
+                            if !filteredNightingaleCouplets.isEmpty {
+                                sectionHeader(
+                                    icon: "Nightingale02",
+                                    title: "From the Nightingale",
+                                    subtitle: "Couplets gifted by the garden's songbird",
+                                    count: revealedPoemsStore.revealedNightingaleCount,
+                                    total: NightingaleCouplets.couplets.count
+                                )
+                                .id("tourNightingale")
+                                .anchorPreference(key: SectionAnchorKey.self, value: .bounds) { [1: $0] }
 
-                            let nightRevealed = revealedFilteredNightingale
-                            let nightIndex = Dictionary(uniqueKeysWithValues: nightRevealed.enumerated().map { ($1.id, $0) })
+                                let nightRevealed = revealedFilteredNightingale
+                                let nightIndex = Dictionary(uniqueKeysWithValues: nightRevealed.enumerated().map { ($1.id, $0) })
 
-                            LazyVGrid(columns: tileColumns, spacing: 12) {
-                                ForEach(Array(filteredNightingaleCouplets.enumerated()), id: \.element.id) { _, couplet in
-                                    if revealedPoemsStore.revealedNightingaleIDs.contains(couplet.id) {
-                                        let idx = nightIndex[couplet.id] ?? 0
-                                        NavigationLink(destination: PoemDetailView(poems: nightRevealed, currentIndex: idx)) {
-                                            poemTile(couplet)
+                                LazyVGrid(columns: tileColumns, spacing: 12) {
+                                    ForEach(Array(filteredNightingaleCouplets.enumerated()), id: \.element.id) { _, couplet in
+                                        if revealedPoemsStore.revealedNightingaleIDs.contains(couplet.id) {
+                                            let idx = nightIndex[couplet.id] ?? 0
+                                            NavigationLink(destination: PoemDetailView(poems: nightRevealed, currentIndex: idx)) {
+                                                poemTile(couplet)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .simultaneousGesture(TapGesture().onEnded { audio.playSFX(.gentleTap) })
+                                            .accessibilityElement(children: .ignore)
+                                            .accessibilityLabel("\(couplet.poet). \(couplet.english)")
+                                            .accessibilityHint("Double tap to view full couplet")
+                                        } else {
+                                            LockedPoemTileView(poet: couplet.poet, accent: poetAccent(couplet.poet))
                                         }
-                                        .buttonStyle(.plain)
-                                        .simultaneousGesture(TapGesture().onEnded { audio.playSFX(.gentleTap) })
-                                        .accessibilityElement(children: .ignore)
-                                        .accessibilityLabel("\(couplet.poet). \(couplet.english)")
-                                        .accessibilityHint("Double tap to view full couplet")
-                                    } else {
-                                        LockedPoemTileView(poet: couplet.poet, accent: poetAccent(couplet.poet))
                                     }
                                 }
                             }
-                        }
 
-                        // Persian divider
-                        if !filteredNightingaleCouplets.isEmpty && !revealedPoetBios.isEmpty {
-                            persianDivider
-                        }
-
-                        // Poet biographies
-                        if !revealedPoetBios.isEmpty && !showFavoritesOnly {
-                            poetsSectionHeader
-
-                            ForEach(revealedPoetBios) { poet in
-                                poetCard(poet)
+                            // Persian divider
+                            if !filteredNightingaleCouplets.isEmpty && !revealedPoetBios.isEmpty {
+                                persianDivider
                             }
+
+                            // Poet biographies
+                            if !revealedPoetBios.isEmpty && !showFavoritesOnly {
+                                poetsSectionHeader
+                                    .id("tourPoets")
+                                    .anchorPreference(key: SectionAnchorKey.self, value: .bounds) { [2: $0] }
+
+                                ForEach(revealedPoetBios) { poet in
+                                    poetCard(poet)
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 80)
+                    }
+                    .onChange(of: tutorialTourStep) { step in
+                        guard step >= 0 else { return }
+                        let ids = ["tourLotus", "tourNightingale", "tourPoets"]
+                        withAnimation(.easeInOut(duration: 0.4)) {
+                            proxy.scrollTo(ids[step], anchor: .center)
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.bottom, 80)
                 }
+            }
+
+        }
+        .overlayPreferenceValue(SectionAnchorKey.self) { anchors in
+            if tutorialTourStep >= 0 {
+                tourSpotlightOverlay(anchors: anchors)
+                    .onTapGesture { advanceTutorialTour() }
             }
         }
         .navigationTitle("Library")
@@ -380,6 +411,20 @@ struct LibraryView: View {
         .toolbarColorScheme(colorScheme == .dark ? .dark : .light, for: .navigationBar)
         .toolbarBackground(bgBase, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .onChange(of: hintStore.activeHint) { newHint in
+            if newHint == .exploreLibrary && tutorialTourStep < 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    withAnimation(.easeIn(duration: 0.6)) { tutorialTourStep = 0 }
+                }
+            }
+        }
+        .onAppear {
+            if hintStore.activeHint == .exploreLibrary && tutorialTourStep < 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    withAnimation(.easeIn(duration: 0.6)) { tutorialTourStep = 0 }
+                }
+            }
+        }
         .onChange(of: searchText) { newValue in
             searchDebounceTask?.cancel()
             if newValue.isEmpty {
@@ -862,6 +907,92 @@ struct LibraryView: View {
         .accessibilityLabel("\(poet.name), \(poet.years), from \(poet.homeland). \(poet.bio)")
     }
 
+    // MARK: - Tutorial Tour
+
+    private func advanceTutorialTour() {
+        if tutorialTourStep < 2 {
+            withAnimation(.easeInOut(duration: 0.4)) { tutorialTourStep += 1 }
+        } else {
+            withAnimation(.easeOut(duration: 0.5)) { tutorialTourStep = -1 }
+            hintStore.markLibraryExplored()
+        }
+    }
+
+    private func tourText(for step: Int) -> (text: String, accent: Color) {
+        switch step {
+        case 0:  return ("Poems from the lotus bloom here", rose)
+        case 1:  return ("The nightingale's couplets land here", gold)
+        default: return ("The poets behind every verse", Color.persianSaffron)
+        }
+    }
+
+    /// Full-screen overlay: dark backdrop with a rounded-rect cutout over the active section.
+    private func tourSpotlightOverlay(anchors: [Int: Anchor<CGRect>]) -> some View {
+        GeometryReader { geo in
+            let info = tourText(for: tutorialTourStep)
+            let spotRect: CGRect = {
+                if let anchor = anchors[tutorialTourStep] {
+                    return geo[anchor]
+                }
+                return .zero
+            }()
+            // Expand the spotlight rect a bit for visual breathing room
+            let padded = spotRect.insetBy(dx: -12, dy: -8)
+
+            ZStack {
+                // Dark mask with cutout (even-odd fill creates the hole)
+                SpotlightCutoutShape(spotlight: padded, cornerRadius: 14)
+                    .fill(Color.black.opacity(0.60), style: FillStyle(eoFill: true))
+
+                // Glow border around the spotlight area
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(info.accent.opacity(0.5), lineWidth: 2)
+                    .frame(width: padded.width, height: padded.height)
+                    .position(x: padded.midX, y: padded.midY)
+                    .shadow(color: info.accent.opacity(0.4), radius: 12)
+
+                // Text pill below the spotlight
+                VStack(spacing: 8) {
+                    Text(info.text)
+                        .font(.system(size: 17, weight: .semibold, design: .serif))
+                        .italic()
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.white, info.accent.opacity(0.85)],
+                                startPoint: .leading, endPoint: .trailing
+                            )
+                        )
+
+                    // Progress dots
+                    HStack(spacing: 8) {
+                        ForEach(0..<3, id: \.self) { i in
+                            Circle()
+                                .fill(i == tutorialTourStep ? info.accent : .white.opacity(0.25))
+                                .frame(width: 6, height: 6)
+                        }
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule()
+                        .fill(Color.black.opacity(0.70))
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(info.accent.opacity(0.35), lineWidth: 1)
+                        )
+                )
+                .shadow(color: info.accent.opacity(0.4), radius: 12)
+                .position(
+                    x: geo.size.width / 2,
+                    y: min(padded.maxY + 40, geo.size.height - 80)
+                )
+            }
+        }
+        .transition(.opacity)
+    }
+
     // MARK: - Empty State
 
     private var emptyStateView: some View {
@@ -922,7 +1053,7 @@ private struct LockedPoemTileView: View {
                 .textCase(.uppercase)
                 .tracking(1.5)
 
-            Text("A verse awaits\u{2026}")
+            Text("A verse awaits")
                 .font(.system(size: footnoteSize, weight: .medium, design: .serif))
                 .italic()
                 .foregroundStyle(textPrimary.opacity(0.15))
@@ -954,5 +1085,23 @@ private struct LockedPoemTileView: View {
                 shimmerPhase = 1.5
             }
         }
+    }
+}
+
+// MARK: - Spotlight Cutout Shape
+
+/// Fills everything EXCEPT a rounded-rect spotlight area (using even-odd fill).
+private struct SpotlightCutoutShape: Shape {
+    let spotlight: CGRect
+    let cornerRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addRect(rect)
+        path.addRoundedRect(
+            in: spotlight,
+            cornerSize: CGSize(width: cornerRadius, height: cornerRadius)
+        )
+        return path
     }
 }

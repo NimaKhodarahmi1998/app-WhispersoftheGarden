@@ -17,7 +17,7 @@
 import UIKit
 
 enum SFXType {
-    case waterDrop, lilyPadAppear, lotusBloom, poemReveal, poemDismiss
+    case waterDrop, lilyPadAppear, poemReveal, poemDismiss
     case nightingaleChirp, nightingaleFarewell
     case wingFlutter, wingDeparture, whisperTone, petalWhoosh, gentleTap
 }
@@ -34,7 +34,6 @@ enum SFXBufferGen {
         switch type {
         case .waterDrop:        return waterDrop(sr: sr)
         case .lilyPadAppear:    return lilyPadAppear(sr: sr)
-        case .lotusBloom:       return []
         case .poemReveal:       return poemReveal(sr: sr)
         case .poemDismiss:      return poemDismiss(sr: sr)
         case .nightingaleChirp:    return nightingaleChirp(sr: sr)
@@ -207,7 +206,7 @@ enum SFXBufferGen {
         return buf
     }
 
-    // MARK: - 4. Poem Reveal (ascending harp arpeggio — Karplus-Strong)
+    // MARK: - 3. Poem Reveal (ascending harp arpeggio — Karplus-Strong)
     //
     // Gentle ascending harp plucks using Karplus-Strong plucked-string
     // synthesis. Five notes of a C-major pentatonic climb upward,
@@ -669,12 +668,6 @@ enum Haptics {
     static func waterTouch() {
         let gen = UIImpactFeedbackGenerator(style: .soft)
         gen.impactOccurred(intensity: 0.40)
-    }
-
-    /// Lily pad transforms into a lotus — a gentle unfolding.
-    static func lotusBloom() {
-        let gen = UIImpactFeedbackGenerator(style: .medium)
-        gen.impactOccurred(intensity: 0.50)
     }
 
     /// Poem overlay closes — the softest release.

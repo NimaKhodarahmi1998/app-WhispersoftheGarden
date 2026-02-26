@@ -22,13 +22,11 @@ struct GardenHintView: View {
     let reduceMotion: Bool
     let mode: GardenHintMode
     var effectsOpacity: Double = 1.0  // fades bright effects without touching the vignette
+    var textOverride: String? = nil   // custom text for cycling hints
 
     @State private var ring0: CGFloat = 0
     @State private var ring1: CGFloat = 0
     @State private var ring2: CGFloat = 0
-    @State private var textOpacity: Double = 0
-    @State private var textOffset: CGFloat = 4
-    @State private var breathe: CGFloat = 0
     @State private var shimmerAngle: Double = 0
 
     private var color: Color {
@@ -36,26 +34,22 @@ struct GardenHintView: View {
         case .tapPool:           return .persianTurquoise
         case .tapLilyPad:        return .persianSaffron
         case .dragPool:          return .persianTurquoise
-        case .tapPoolAgain:      return .persianTurquoise
-        case .tapSecondLilyPad:  return .persianSaffron
-        case .tapPoolThrice:     return .persianTurquoise
-        case .tapThirdLilyPad:   return .persianSaffron
-        case .longPressPool:     return .persianTurquoise
         case .tapNightingale:    return .persianGold
+        case .visitLibrary:      return .persianSaffron
+        case .exploreLibrary:    return .persianSaffron
+        case .returnToGarden:    return .persianTurquoise
         }
     }
 
     private var hintText: String {
         switch stage {
-        case .tapPool:           return "Touch the water\u{2026} a leaf will appear"
-        case .tapLilyPad:        return "Tap the leaf\u{2026} it holds a hidden verse"
-        case .dragPool:          return "Trace the water to play Santur\u{2026}"
-        case .tapPoolAgain:      return "Touch the water again\u{2026} another leaf awaits"
-        case .tapSecondLilyPad:  return "Tap to bloom\u{2026} each lotus reveals a poem"
-        case .tapPoolThrice:     return "Once more\u{2026} the garden has more to give"
-        case .tapThirdLilyPad:   return "Bloom the leaf\u{2026} a poet\u{2019}s voice is inside"
-        case .longPressPool:     return "Linger on the water\u{2026} patience reveals more"
-        case .tapNightingale:    return "The nightingale carries a verse\u{2026} tap gently"
+        case .tapPool:           return "Touch the water"
+        case .tapLilyPad:        return "Now, the leaf"
+        case .dragPool:          return "Trace the water to play the Santur"
+        case .tapNightingale:    return "The nightingale carries a verse"
+        case .visitLibrary:      return "Your verses are kept in the library"
+        case .exploreLibrary:    return "Every verse you find belongs here"
+        case .returnToGarden:    return "The garden awaits your return"
         }
     }
 
@@ -137,7 +131,7 @@ struct GardenHintView: View {
                 }
 
                 if mode == .tutorial {
-                    HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
+                    HintLabel(text: textOverride ?? hintText, color: c, position: pos, baseRadius: r,
                               opacity: 0.85, yOffset: 0)
                 }
             }
@@ -152,8 +146,7 @@ struct GardenHintView: View {
         let r = baseRadius
         let pos = targetPosition
         let os = opacityScale
-        let spotlightOpacity = (0.35 + breathe * 0.20) * os
-        let glowOpacity = (0.40 + breathe * 0.25) * os
+        let glowOpacity = 0.50 * os
 
         return ZStack {
             // 1. Spotlight vignette — deeper for nightingale
@@ -167,7 +160,6 @@ struct GardenHintView: View {
                 endRadius: isNightingale ? 280 : 320
             )
             .ignoresSafeArea()
-            .opacity(spotlightOpacity / 0.35)
 
             // All bright effects — scaled by effectsOpacity (vignette above stays independent)
             Group {
@@ -195,22 +187,21 @@ struct GardenHintView: View {
                 if isNightingale {
                     // --- Nightingale: THE HOLIEST BEING ON EARTH ---
 
-                    // Holy spotlight — blur cached via drawingGroup,
-                    // breathe only drives external .opacity() (no blur recompute)
+                    // Holy spotlight — blur cached via drawingGroup
                     HolySpotlight(
                         color: c, targetPosition: pos, screenSize: screenSize,
                         opacityScale: os
                     )
-                    .opacity(0.45 + Double(breathe) * 0.20)
+                    .opacity(0.55)
 
                     // Divine halo behind the nightingale
                     NightingaleHalo(color: c, position: pos,
-                                    breathe: breathe, opacityScale: os)
+                                    breathe: 0.5, opacityScale: os)
 
-                    // Rotating shimmer rays — brighter, more rays
+                    // Rotating shimmer rays
                     NightingaleRaysView(
                         color: c, position: pos, angle: shimmerAngle,
-                        breathe: breathe, opacityScale: os
+                        breathe: 0.5, opacityScale: os
                     )
 
                     // Ascending holy sparks
@@ -221,18 +212,18 @@ struct GardenHintView: View {
                     NightingaleDustCanvas(color: c, targetPosition: pos, isActive: effectsOpacity > 0.05)
                         .opacity(os)
 
-                    // Radiant pulsing star at center
+                    // Radiant star at center
                     NightingaleStar(color: c, position: pos,
-                                    breathe: breathe, opacityScale: os)
+                                    breathe: 0.5, opacityScale: os)
 
                 } else {
                     // --- Pool / Lily Pad: ripple rings + rising motes ---
 
-                    // Bright pulsing center dot
+                    // Steady center dot
                     Circle()
                         .fill(c)
-                        .frame(width: 10 + breathe * 4, height: 10 + breathe * 4)
-                        .opacity((0.6 + breathe * 0.3) * os)
+                        .frame(width: 12, height: 12)
+                        .opacity(0.7 * os)
                         .blur(radius: 3)
                         .position(pos)
 
@@ -249,10 +240,10 @@ struct GardenHintView: View {
                         .opacity(os)
                 }
 
-                // Text label (tutorial only)
+                // Text label (tutorial only) — static, no pulsing
                 if mode == .tutorial {
-                    HintLabel(text: hintText, color: c, position: pos, baseRadius: r,
-                              opacity: textOpacity, yOffset: textOffset)
+                    HintLabel(text: textOverride ?? hintText, color: c, position: pos, baseRadius: r,
+                              opacity: 0.9, yOffset: 0)
                 }
             }
             .opacity(effectsOpacity)
@@ -271,13 +262,6 @@ struct GardenHintView: View {
         }
         withAnimation(.easeOut(duration: 2.4).repeatForever(autoreverses: false).delay(1.6)) {
             ring2 = 1
-        }
-        withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true).delay(0.4)) {
-            textOpacity = 0.9
-            textOffset = -2
-        }
-        withAnimation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true)) {
-            breathe = 1
         }
         withAnimation(.linear(duration: 10.0).repeatForever(autoreverses: false)) {
             shimmerAngle = .pi * 2

@@ -290,7 +290,7 @@ struct LandingPage: View {
                         .frame(height: videoHeight)
 
                     // Heading
-                    Text("Listen closely — the garden is whispering")
+                    Text("Listen closely, the garden is whispering")
                         .font(.custom("Didot", size: isIPad ? headingBase * 1.47 : headingBase))
                         .italic()
                         .foregroundColor(.white)
@@ -390,7 +390,7 @@ struct LandingPage: View {
 
                     // 4. Persian poetry quote — Hafez
                     VStack(spacing: 4) {
-                        Text("Glad tidings — the days of sorrow shall not last")
+                        Text("Glad tidings; the days of sorrow shall not last")
                             .font(.system(size: isIPad ? quoteEnglishBase * 1.27 : quoteEnglishBase, design: .serif))
                             .italic()
                         Text("رسید مژده که ایام غم نخواهد ماند")

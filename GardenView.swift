@@ -133,28 +133,28 @@ struct GardenView: View {
     @State private var nightingaleFlightDuration: TimeInterval = 2.2
 
     private let departureWhispers = [
-        "The nightingale shall return\u{2026}",
-        "Its song lingers in the wind\u{2026}",
-        "Patience\u{2026} the melody returns\u{2026}",
-        "A promise carried on the breeze\u{2026}",
-        "The song fades, but not forever\u{2026}",
-        "Until the garden calls again\u{2026}",
+        "The nightingale shall return",
+        "Its song lingers in the wind",
+        "Patience, the melody returns",
+        "A promise carried on the breeze",
+        "The song fades, but not forever",
+        "Until the garden calls again",
     ]
 
     private let approachWhispers = [
-        "A distant song stirs\u{2026}",
-        "Do you hear it\u{2026} a familiar melody\u{2026}",
-        "The wind carries a golden note\u{2026}",
-        "Something stirs among the branches\u{2026}",
-        "A flutter of wings, drawing near\u{2026}",
-        "The garden hums with anticipation\u{2026}",
+        "A distant song stirs",
+        "Do you hear it, a familiar melody",
+        "The wind carries a golden note",
+        "Something stirs among the branches",
+        "A flutter of wings, drawing near",
+        "The garden hums with anticipation",
     ]
 
     private let autoDepartureWhispers = [
-        "The nightingale could not wait\u{2026}",
-        "It flew before you reached out\u{2026}",
-        "Patience is a garden\u{2019}s virtue\u{2026}",
-        "The song fades into the wind\u{2026}",
+        "The nightingale could not wait",
+        "It flew before you reached out",
+        "Patience is a garden's virtue",
+        "The song fades into the wind",
     ]
 
     /// Garden evolves based on how many poems have been revealed.
@@ -236,7 +236,7 @@ struct GardenView: View {
     @State private var nightingalePerchDeadline: Date?
 
     // Hint system
-    @StateObject private var hintStore = GardenHintStore()
+    @EnvironmentObject var hintStore: GardenHintStore
     @State private var hintVisible = false
 
     // Perch positions on land (cobblestone & garden bed, alternating left/right)
@@ -257,6 +257,9 @@ struct GardenView: View {
                     .ignoresSafeArea()
                     .onAppear { viewSize = geo.size }
                     .onChange(of: geo.size) { newSize in viewSize = newSize }
+                    .onChange(of: hintStore.hasEverReturnedToGarden) { returned in
+                        if returned { showTutorialCompleteWhisper() }
+                    }
 
                 Image("GardenView")
                     .resizable()
@@ -436,42 +439,26 @@ struct GardenView: View {
                     renderPad(pad, in: geo.size)
                 }
 
-                // Garden hints — pool & lily pad (tutorial + post-tutorial invitations)
+                // Garden hints — tutorial only, no post-tutorial invitations
                 if hintVisible,
                    !showPoem, !showNightingaleCouplet,
                    !showApproachFeather, !showApproachWhisper {
 
-                    // Tutorial: show the current active hint (non-nightingale)
-                    if let stage = hintStore.activeHint, stage != .tapNightingale {
+                    if let stage = effectiveGardenHint {
                         let pos = hintPosition(for: stage, in: geo.size)
                         GardenHintView(
                             stage: stage,
                             targetPosition: pos,
                             screenSize: geo.size,
                             reduceMotion: reduceMotion,
-                            mode: .tutorial
-                        )
-                        .allowsHitTesting(false)
-                    }
-                    // Post-tutorial invitations (pool/lily pad only — nightingale handled below)
-                    else if !showNightingale,
-                            let inv = invitationStage(in: geo.size),
-                            inv.stage != .tapNightingale {
-                        GardenHintView(
-                            stage: inv.stage,
-                            targetPosition: inv.position,
-                            screenSize: geo.size,
-                            reduceMotion: reduceMotion,
-                            mode: .invitation
+                            mode: .tutorial,
+                            textOverride: cyclingHintText
                         )
                         .allowsHitTesting(false)
                     }
                 }
 
                 // Nightingale hint glow — rendered BEHIND the bird so it looks backlit
-                // effectsOpacity fades bright effects; vignette stays independent
-                // Renders as soon as showNightingale is true (not just perched) so
-                // the vignette crossfades with any non-nightingale invitation
                 if showNightingale, hintVisible,
                    !showApproachFeather, !showApproachWhisper,
                    !showPoem, !showNightingaleCouplet {
@@ -586,6 +573,7 @@ struct GardenView: View {
                         .onTapGesture {
                             audio.playSFX(.poemDismiss)
                             Haptics.poemDismiss()
+                            hintStore.markNightingaleTapped()
                             if reduceMotion {
                                 withAnimation(.default) {
                                     showNightingaleCouplet = false
@@ -675,7 +663,7 @@ struct GardenView: View {
                             .shadow(color: Color.persianGold.opacity(0.5), radius: 16)
                     }
 
-                    Text("The garden is yours now\u{2026}")
+                    Text("The garden is yours now")
                         .font(.system(size: 20, weight: .medium, design: .serif))
                         .italic()
                         .foregroundColor(Color(red: 1.0, green: 0.95, blue: 0.80))
@@ -691,7 +679,7 @@ struct GardenView: View {
                     nightingaleApproachHintView(in: geo.size)
                         .allowsHitTesting(false)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("A golden feather descends — the nightingale draws near")
+                        .accessibilityLabel("A golden feather descends, the nightingale draws near")
                 }
 
             }
@@ -891,8 +879,6 @@ struct GardenView: View {
         petalBurst += 1
         bobNearbyPads(tapLocation: normalized)
         hintStore.markPoolTapped()
-        hintStore.markPoolTappedAgain()
-        hintStore.markPoolTappedThrice()
         saveGardenState()
     }
 
@@ -922,7 +908,6 @@ struct GardenView: View {
         guard !showPoem, !showNightingaleCouplet,
               !nightingaleInFlight, !showApproachFeather else { return }
 
-        hintStore.markPoolLongPressed()
         let lotusCount = pads.filter(\.isLotus).count
 
         if lotusCount <= 1 {
@@ -1213,8 +1198,6 @@ struct GardenView: View {
         pads[index].glowIntensity = 1.0
         pads[index].bloomDate = Date()
         pads[index].lotusLifespan = TimeInterval.random(in: 90...120)
-        audio.playSFX(.lotusBloom)
-        Haptics.lotusBloom()
 
         // Lotus Resonance Cascade — existing lotuses respond nearest-first
         if !reduceMotion {
@@ -1240,8 +1223,6 @@ struct GardenView: View {
         }
 
         hintStore.markPadTapped()
-        hintStore.markSecondPadTapped()
-        hintStore.markThirdPadTapped()
 
         poolPoemsSinceNightingale += 1
         saveGardenState()
@@ -1353,15 +1334,11 @@ struct GardenView: View {
               !showNightingaleCouplet,
               !showApproachFeather else { return }
 
-        let wasFirstNightingale = !hintStore.hasEverTappedNightingale
-        hintStore.markNightingaleTapped()
         audio.playSFX(.nightingaleFarewell)
         audio.playSFX(.wingDeparture)
         Haptics.nightingaleTap()
 
-        if wasFirstNightingale {
-            showTutorialCompleteWhisper()
-        }
+        // "The garden is yours now" triggers later — when user returns from library
         nightingaleIsPerched = false
         nightingalePerchDeadline = nil
         nightingaleIsAutoDeparting = false
@@ -1824,7 +1801,13 @@ struct GardenView: View {
     }
 
     /// Randomizes next nightingale threshold (2-5, weighted toward 3).
+    /// During first tutorial playthrough, forces threshold = 2 for a quick introduction.
     private func rollNightingaleThreshold() {
+        if !hintStore.hasEverTappedNightingale {
+            nightingaleThreshold = 3
+            UserDefaults.standard.set(nightingaleThreshold, forKey: Self.nightingaleThresholdKey)
+            return
+        }
         // Weighted: 3 appears 40%, 2 and 4 each 25%, 5 appears 10%
         let roll = Double.random(in: 0...1)
         if roll < 0.25 {
@@ -2042,7 +2025,6 @@ struct GardenView: View {
 
     private func showBonusCouplet() {
         audio.playSFX(.poemReveal)
-        Haptics.lotusBloom()
         let couplet = NightingaleCouplets.couplets[nightingaleCoupletIndex % NightingaleCouplets.couplets.count]
         nightingaleCoupletIndex += 1
         saveGardenState()
@@ -2060,39 +2042,58 @@ struct GardenView: View {
         }
     }
 
+    /// The garden-visible hint: cycles pool/pad hints during free play
+    /// (after drag tutorial, before nightingale arrives).
+    private var effectiveGardenHint: GardenHintStage? {
+        guard let hint = hintStore.activeHint else { return nil }
+        // These stages are handled elsewhere (MainAppView, LibraryView)
+        if hint == .visitLibrary || hint == .exploreLibrary || hint == .returnToGarden { return nil }
+        // After drag tutorial but before nightingale arrives: cycle pool/pad hints
+        if hint == .tapNightingale && !showNightingale {
+            return pads.contains(where: { !$0.isLotus }) ? .tapLilyPad : .tapPool
+        }
+        // Once nightingale is showing, its hint is rendered separately
+        if hint == .tapNightingale { return nil }
+        return hint
+    }
+
+    /// Text variants for cycling pool/pad hints (2nd and 3rd lotus cycles).
+    private var cyclingHintText: String? {
+        guard let hint = hintStore.activeHint, hint == .tapNightingale, !showNightingale else { return nil }
+        let hasUnbloomedPad = pads.contains(where: { !$0.isLotus })
+        if hasUnbloomedPad {
+            switch poolPoemsSinceNightingale {
+            case 1:  return "Each lotus holds a poem"
+            case 2:  return "One more leaf to bloom"
+            default: return nil
+            }
+        } else {
+            switch poolPoemsSinceNightingale {
+            case 1:  return "Touch the water again"
+            case 2:  return "Once more"
+            default: return nil
+            }
+        }
+    }
+
     private func hintPosition(for stage: GardenHintStage, in size: CGSize) -> CGPoint {
         switch stage {
-        case .tapPool, .tapPoolAgain, .tapPoolThrice,
-             .dragPool, .longPressPool:
+        case .tapPool, .dragPool:
             return CGPoint(x: 0.70 * size.width, y: 0.82 * size.height)
-        case .tapLilyPad, .tapSecondLilyPad, .tapThirdLilyPad:
+        case .tapLilyPad:
             if let firstPad = pads.first(where: { !$0.isLotus }) {
                 return CGPoint(x: firstPad.anchor.x * size.width,
                                y: firstPad.anchor.y * size.height)
             }
             return CGPoint(x: 0.70 * size.width, y: 0.82 * size.height)
         case .tapNightingale:
-            // During fly-in, use destination so the vignette prepares the landing spot
             let pos = (nightingaleInFlight && !nightingaleIsFlyingOut)
                 ? nightingaleFlightDest
                 : nightingalePosition
             return CGPoint(x: pos.x * size.width, y: pos.y * size.height)
+        case .visitLibrary, .exploreLibrary, .returnToGarden:
+            return CGPoint(x: 0.50 * size.width, y: 0.90 * size.height)
         }
-    }
-
-    private func invitationStage(in size: CGSize) -> (stage: GardenHintStage, position: CGPoint)? {
-        guard hintStore.isTutorialComplete else { return nil }
-        guard !showPoem, !showNightingaleCouplet else { return nil }
-
-        if showNightingale && nightingaleIsPerched {
-            return (.tapNightingale, hintPosition(for: .tapNightingale, in: size))
-        }
-        // Suppress pool/lily invitation when nightingale arrival is imminent or in flight
-        guard !nightingaleInFlight, poolPoemsSinceNightingale < nightingaleThreshold else { return nil }
-        if pads.contains(where: { !$0.isLotus }) {
-            return (.tapLilyPad, hintPosition(for: .tapLilyPad, in: size))
-        }
-        return (.tapPool, hintPosition(for: .tapPool, in: size))
     }
 
     private func distance(_ p1: CGPoint, _ p2: CGPoint) -> CGFloat {
