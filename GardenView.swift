@@ -522,6 +522,8 @@ struct GardenView: View {
                                     showPoem = false
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    // Skip cleanup if a new poem was opened during the fade
+                                    guard !showPoem else { return }
                                     currentPoem = nil
                                     if poolPoemsSinceNightingale >= nightingaleThreshold && !showNightingale && !nightingaleInFlight {
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -537,6 +539,8 @@ struct GardenView: View {
                                     showPoem = false
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                                    // Skip cleanup if a new poem was opened during the fade
+                                    guard !showPoem else { return }
                                     currentPoem = nil
                                     if poolPoemsSinceNightingale >= nightingaleThreshold && !showNightingale && !nightingaleInFlight {
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -579,6 +583,7 @@ struct GardenView: View {
                                     showNightingaleCouplet = false
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    guard !showNightingaleCouplet else { return }
                                     currentNightingaleCouplet = nil
                                     nightingaleDismiss()
                                 }
@@ -587,6 +592,7 @@ struct GardenView: View {
                                     showNightingaleCouplet = false
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                                    guard !showNightingaleCouplet else { return }
                                     currentNightingaleCouplet = nil
                                     nightingaleDismiss()
                                 }
@@ -725,6 +731,16 @@ struct GardenView: View {
             }
             lastUpdateTime = now
             time += dt
+
+            // Safety net: recover from stuck overlay states.
+            // If the show flag is true but the backing data is nil, the dismiss
+            // button doesn't exist and taps are permanently blocked.
+            if showPoem && currentPoem == nil {
+                showPoem = false
+            }
+            if showNightingaleCouplet && currentNightingaleCouplet == nil {
+                showNightingaleCouplet = false
+            }
 
             updatePads(dt: dt)
 
